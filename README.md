@@ -11,4 +11,5 @@ NOT STARTED
 
 ## FocusKDE
 A widget for KDE Plasma that allows users to quickly view their timetables whilst running a KDE plasma desktop environment. 
-NOT STARTED YET
+
+Wont be started until the completion of Focus Finder on Android.
