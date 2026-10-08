@@ -173,7 +173,7 @@ def fetch_timetable():
 class TimetableApp:
     def __init__(self, root, events):
         self.root = root
-        self.root.title(f"FocusFinder ({CURRENT_OS})")
+        self.root.title(f"FocusFinder {CURRENT_OS}")
         self.root.geometry("650x450")
         
         self.events = events
