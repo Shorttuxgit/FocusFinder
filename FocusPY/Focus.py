@@ -173,7 +173,7 @@ def fetch_timetable():
 class TimetableApp:
     def __init__(self, root, events):
         self.root = root
-        self.root.title(f"Barton Timetable Viewer ({CURRENT_OS})")
+        self.root.title(f"FocusFinder ({CURRENT_OS})")
         self.root.geometry("650x450")
         
         self.events = events
@@ -322,7 +322,7 @@ class TimetableApp:
         if found:
             self.update_display()
         else:
-            messagebox.showinfo("Info", "No timetable events found specifically for today's date.")
+            messagebox.showinfo("Info", "Time to Relax! No Lessons Today!!")
 
 
 def run():
