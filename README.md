@@ -1,9 +1,16 @@
 # FocusFinder
 A small project aiming to move the focus system to a real application on Android and possibly IOS.
 
+## Core
+The base engine that drives the rest of the apps.
 
 ## FocusPy
-The original trial script designed to see if extracting the timetable information from the website was possible.
+A fully functional app running purely in one python file.
+
+Suported Operating Systems:
+-Fedora [Working fully]
+-Windows [Untested]
+-Debian [Untested]
 
 
 ## Focus Finder on Android
