@@ -8,9 +8,9 @@ The base engine that drives the rest of the apps.
 A fully functional app running purely in one python file.
 
 Suported Operating Systems:
--Fedora [Working fully]
--Windows [Untested]
--Debian [Untested]
+  -Fedora [Working fully]
+  -Windows [Untested]
+  -Debian [Untested]
 
 
 ## Focus Finder on Android
