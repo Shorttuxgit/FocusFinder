@@ -76,7 +76,7 @@ def extract_events(livewire_responses):
 class FocusFinderApp:
     def __init__(self, root):
         self.root = root
-        self.root.title(f"FocusFinder ({CURRENT_OS})")
+        self.root.title(f"FocusFinder {CURRENT_OS}")
         self.root.geometry("780x550")
         self.root.minsize(680, 480)
         self.root.configure(fg_color=BG_DARK)
