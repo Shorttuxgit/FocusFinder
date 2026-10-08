@@ -7,10 +7,11 @@ The base engine that drives the rest of the apps.
 ## FocusPy
 A fully functional app running purely in one python file.
 
-Suported Operating Systems:
-  -Fedora [Working fully]
-  -Windows [Untested]
-  -Debian [Untested]
+### Suported Operating Systems
+* Windows - Untested
+* Fedora - Fully Working
+* Debian - Untested
+
 
 
 ## Focus Finder on Android
