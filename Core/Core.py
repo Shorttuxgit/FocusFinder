@@ -41,7 +41,6 @@ from playwright.sync_api import sync_playwright
 
 SESSION_FILE = "session.json"
 BASE_URL = "https://focus.barton.ac.uk"
-TIMETABLE_URL = "https://focus.barton.ac.uk/student-focus/107025/timetable"
 
 
 def extract_events(livewire_responses):
@@ -161,7 +160,7 @@ def fetch_timetable(p):
                 pass
 
     page.on("response", handle_response)
-    page.goto(TIMETABLE_URL)
+    page.goto(BASE_URL)
 
     # Detect if saved session has expired
     if "login" in page.url.lower() or "google.com" in page.url.lower():
@@ -171,6 +170,21 @@ def fetch_timetable(p):
             os.remove(SESSION_FILE)
         return None
 
+    url = page.url
+    i = url.rfind('/')
+
+    if(i < 0):
+        print("[!] Invalid focus redirect")
+        browser.close()
+        if os.path.exists(SESSION_FILE):
+            os.remove(SESSION_FILE)
+        return None
+    
+    url = url[:i-len(url)]
+    url += "/timetable"
+
+    page.goto(url)
+    
     try:
         page.wait_for_selector("#powerCalendar", timeout=15000)
         page.wait_for_load_state("networkidle", timeout=10000)
