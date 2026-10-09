@@ -34,7 +34,6 @@ ctk.set_default_color_theme("blue")
 SESSION_FILE = "session.json"
 ICON_FILE = "icon.png"
 BASE_URL = "https://focus.barton.ac.uk"
-TIMETABLE_URL = "https://focus.barton.ac.uk/student-focus/107025/timetable"
 
 # --- COLOR PALETTE ---
 BG_DARK = "#1e1e2e"
@@ -311,8 +310,7 @@ class FocusFinderApp:
                         pass
 
             page.on("response", handle_response)
-            self.gui_log(f"[*] Navigating to timetable URL: {TIMETABLE_URL}", "Fetching timetable data...")
-            page.goto(TIMETABLE_URL)
+            page.goto(BASE_URL)
 
             if "login" in page.url.lower() or "google.com" in page.url.lower():
                 self.gui_log("[!] Session expired. Re-authenticating...")
@@ -321,6 +319,23 @@ class FocusFinderApp:
                     os.remove(SESSION_FILE)
                 return self.fetch_timetable_data(sync_playwright_fn)
 
+            url = page.url
+            i = url.rfind('/')
+
+            if(i < 0):
+                self.gui_log("[!] Invalid focus redirect")
+                browser.close()
+                if os.path.exists(SESSION_FILE):
+                    os.remove(SESSION_FILE)
+                return self.fetch_timetable_data(sync_playwright_fn)
+            
+            url = url[:i-len(url)]
+            url += "/timetable"
+
+            self.gui_log(f"[*] Navigating to timetable URL: {url}", "Fetching timetable data...")
+
+            page.goto(url)
+            
             try:
                 page.wait_for_selector("#powerCalendar", timeout=15000)
                 page.wait_for_load_state("networkidle", timeout=10000)
