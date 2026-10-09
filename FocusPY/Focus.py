@@ -332,7 +332,7 @@ class FocusFinderApp:
             url = url[:i-len(url)]
             url += "/timetable"
 
-            self.gui_log(f"[*] Navigating to timetable URL: {url}", "Fetching timetable data...")
+            self.gui_log(f"[*] Navigating to timetable...", "Fetching timetable data...")
 
             page.goto(url)
             
