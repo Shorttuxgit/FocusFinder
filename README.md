@@ -8,7 +8,7 @@ The base engine that drives the rest of the apps.
 A fully functional app running purely in one python file.
 
 ### Suported Operating Systems
-* Windows - Not working currently
+* Windows - Fully working
 * Fedora - Fully Working
 * Debian - Untested
 
