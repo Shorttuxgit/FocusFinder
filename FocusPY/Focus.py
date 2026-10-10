@@ -6,7 +6,7 @@ import platform
 import json
 import threading
 import queue
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 # --- OS DETECTION ---
 CURRENT_OS = platform.system()
@@ -32,6 +32,7 @@ ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
 SESSION_FILE = "session.json"
+CACHE_FILE = "timetable_cache.json"
 ICON_FILE = "icon.png"
 BASE_URL = "https://focus.barton.ac.uk"
 
@@ -54,6 +55,41 @@ def apply_app_icon(root):
             root.iconphoto(True, app_icon)
         except Exception:
             pass
+
+
+def get_current_week_sunday():
+    """Calculates the date of the Sunday commencing the current week."""
+    today = date.today()
+    days_since_sunday = (today.weekday() + 1) % 7
+    sunday = today - timedelta(days=days_since_sunday)
+    return sunday.strftime("%Y-%m-%d")
+
+
+def load_cached_timetable():
+    """Loads cached timetable if it belongs to the current week commencing Sunday."""
+    if not os.path.exists(CACHE_FILE):
+        return None
+    try:
+        with open(CACHE_FILE, "r") as f:
+            data = json.load(f)
+            if data.get("week_commencing") == get_current_week_sunday():
+                return data.get("events", [])
+    except Exception:
+        pass
+    return None
+
+
+def save_cached_timetable(events):
+    """Saves fetched timetable events along with the current week commencing Sunday."""
+    try:
+        data = {
+            "week_commencing": get_current_week_sunday(),
+            "events": events
+        }
+        with open(CACHE_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        print(f"[!] Warning: Could not save timetable cache: {e}")
 
 
 def extract_events(livewire_responses):
@@ -222,10 +258,21 @@ class FocusFinderApp:
         self.root.after(100, self.process_queue)
 
     def bg_fetch_pipeline(self):
-        """Background pipeline for environment checks, login, and data fetch."""
+        """Background pipeline checking weekly cache first, then falling back to live multi-week fetch."""
         try:
             self.gui_log(f"[*] Detected Operating System: {CURRENT_OS} ({platform.release()})")
             
+            # Check for weekly cached timetable first
+            self.gui_log("[*] Checking for weekly cached timetable...")
+            cached_events = load_cached_timetable()
+            
+            if cached_events:
+                self.gui_log(f"[+] Loaded {len(cached_events)} events from weekly cache!", "Cache loaded successfully!")
+                self.msg_queue.put(("DONE", cached_events))
+                return
+
+            self.gui_log("[*] No valid cache for this week. Connecting to portal...")
+
             # 1. Dependency Verification with Live Terminal Streams
             try:
                 import playwright
@@ -256,6 +303,7 @@ class FocusFinderApp:
             if not events:
                 self.msg_queue.put(("ERROR", "No timetable events could be retrieved."))
             else:
+                save_cached_timetable(events)
                 self.msg_queue.put(("DONE", events))
 
         except Exception as e:
@@ -287,7 +335,7 @@ class FocusFinderApp:
         browser.close()
 
     def fetch_timetable_data(self, sync_playwright_fn):
-        """Runs headless Playwright automation to intercept calendar responses."""
+        """Runs headless Playwright automation to collect current & next week, plus previous week from cache."""
         self.gui_log("[*] Launching browser engine...", "Connecting to Focus portal...")
 
         with sync_playwright_fn() as p:
@@ -342,8 +390,49 @@ class FocusFinderApp:
             except Exception:
                 pass
 
-            self.gui_log("[*] Parsing Livewire schedule payload...", "Processing schedule...")
-            events = extract_events(livewire_responses)
+            self.gui_log("[*] Collecting current week schedule...", "Processing schedule...")
+            current_week_events = extract_events(livewire_responses)
+            livewire_responses.clear()
+
+            # Collect next week's timetable using the calendar's Next week button
+            try:
+                self.gui_log("[*] Fetching next week's timetable...")
+                page.click(".fc-next-button")
+                page.wait_for_timeout(2000)
+                page.wait_for_load_state("networkidle", timeout=5000)
+            except Exception as e:
+                self.gui_log(f"[!] Could not pull next week automatically: {e}")
+
+            next_week_events = extract_events(livewire_responses)
+
+            all_fetched = current_week_events + next_week_events
+
+            # Include previous week's events from existing cache if available
+            previous_week_events = []
+            if os.path.exists(CACHE_FILE):
+                try:
+                    with open(CACHE_FILE, "r") as f:
+                        old_cache = json.load(f)
+                        old_events = old_cache.get("events", [])
+                        current_sunday_str = get_current_week_sunday()
+                        current_sunday_dt = datetime.strptime(current_sunday_str, "%Y-%m-%d")
+                        prev_sunday_dt = current_sunday_dt - timedelta(days=7)
+
+                        for ev in old_events:
+                            start_raw = str(ev.get("start", ""))
+                            try:
+                                clean_start = start_raw.split(".")[0].replace("T", " ")
+                                dt_start = datetime.strptime(clean_start, "%Y-%m-%d %H:%M:%S")
+                                days_since_sunday = (dt_start.weekday() + 1) % 7
+                                ev_sunday = dt_start - timedelta(days=days_since_sunday)
+                                if ev_sunday.date() == prev_sunday_dt.date():
+                                    previous_week_events.append(ev)
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+
+            events = previous_week_events + all_fetched
 
             if not events:
                 self.gui_log("[*] Secondary fallback extraction via JS context...")
@@ -544,6 +633,10 @@ class TimetableWidget:
 
                 dt_start = datetime.strptime(clean_start, "%Y-%m-%d %H:%M:%S")
                 dt_end = datetime.strptime(clean_end, "%Y-%m-%d %H:%M:%S")
+
+                # Exclude Saturdays completely (weekday 5 is Saturday)
+                if dt_start.weekday() == 5:
+                    continue
 
                 day_key = dt_start.strftime("%Y-%m-%d")
                 day_header = dt_start.strftime("%A, %d %B %Y")
