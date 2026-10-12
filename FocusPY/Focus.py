@@ -359,13 +359,34 @@ class FocusFinderApp:
 
             page.on("response", handle_response)
             page.goto(BASE_URL)
-
+    
             if "login" in page.url.lower() or "google.com" in page.url.lower():
                 self.gui_log("[!] Session expired. Re-authenticating...")
                 browser.close()
                 if os.path.exists(SESSION_FILE):
                     os.remove(SESSION_FILE)
-                return self.fetch_timetable_data(sync_playwright_fn)
+                
+                login_success = False
+                for attempt in range(4):
+                    self.perform_login(p)
+                    browser = p.chromium.launch(headless=True)
+                    context = browser.new_context(storage_state=SESSION_FILE)
+                    page = context.new_page()
+                    page.on("response", handle_response)
+                    page.goto(BASE_URL)
+                    
+                    if not ("login" in page.url.lower() or "google.com" in page.url.lower()):
+                        login_success = True
+                        break
+                    else:
+                        self.gui_log(f"[!] Re-login attempt {attempt + 1} failed.")
+                        browser.close()
+                        if os.path.exists(SESSION_FILE):
+                            os.remove(SESSION_FILE)
+
+                if not login_success:
+                    self.gui_log("[!] All re-login attempts failed.")
+                    return None
 
             url = page.url
             i = url.rfind('/')
@@ -375,8 +396,7 @@ class FocusFinderApp:
                 browser.close()
                 if os.path.exists(SESSION_FILE):
                     os.remove(SESSION_FILE)
-                return self.fetch_timetable_data(sync_playwright_fn)
-            
+                return None
             url = url[:i-len(url)]
             url += "/timetable"
 
