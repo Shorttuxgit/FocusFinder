@@ -11,7 +11,7 @@ A fully functional app running purely in one python file.
 * Windows - Fully working
 * Fedora - Fully Working
 * Debian - Untested
-* Arch - Not Working
+* Arch - Requires advanced knowledge for installation
 
 
 
