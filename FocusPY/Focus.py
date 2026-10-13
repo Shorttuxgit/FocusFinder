@@ -73,17 +73,18 @@ def load_cached_timetable():
         with open(CACHE_FILE, "r") as f:
             data = json.load(f)
             if data.get("week_commencing") == get_current_week_sunday():
-                return data.get("events", [])
+                return data.get("events", []), data.get("student_name", "Student")
     except Exception:
         pass
     return None
 
 
-def save_cached_timetable(events):
-    """Saves fetched timetable events along with the current week commencing Sunday."""
+def save_cached_timetable(events, student_name):
+    """Saves fetched timetable events and student name along with the current week commencing Sunday."""
     try:
         data = {
             "week_commencing": get_current_week_sunday(),
+            "student_name": student_name,
             "events": events
         }
         with open(CACHE_FILE, "w") as f:
@@ -112,8 +113,8 @@ class FocusFinderApp:
     def __init__(self, root):
         self.root = root
         self.root.title(f"FocusFinder {CURRENT_OS}")
-        self.root.geometry("780x550")
-        self.root.minsize(680, 480)
+        self.root.geometry("780x580")
+        self.root.minsize(680, 500)
         self.root.configure(fg_color=BG_DARK)
 
         apply_app_icon(self.root)
@@ -245,7 +246,8 @@ class FocusFinderApp:
                 elif msg_type == "STATUS":
                     self.status_var.set(content)
                 elif msg_type == "DONE":
-                    self.transition_to_timetable(content)
+                    events, student_name = content
+                    self.transition_to_timetable(events, student_name)
                     return
                 elif msg_type == "ERROR":
                     self.progress.stop()
@@ -264,11 +266,12 @@ class FocusFinderApp:
             
             # Check for weekly cached timetable first
             self.gui_log("[*] Checking for weekly cached timetable...")
-            cached_events = load_cached_timetable()
+            cache_result = load_cached_timetable()
             
-            if cached_events:
+            if cache_result:
+                cached_events, student_name = cache_result
                 self.gui_log(f"[+] Loaded {len(cached_events)} events from weekly cache!", "Cache loaded successfully!")
-                self.msg_queue.put(("DONE", cached_events))
+                self.msg_queue.put(("DONE", (cached_events, student_name)))
                 return
 
             self.gui_log("[*] No valid cache for this week. Connecting to portal...")
@@ -297,14 +300,15 @@ class FocusFinderApp:
             )
             self.gui_log("[*] Environment checks complete.\n", "Environment verified.")
 
-            # 2. Timetable Fetching
-            events = self.fetch_timetable_data(sync_playwright)
+            # 2. Timetable Fetching & Name Extraction
+            result = self.fetch_timetable_data(sync_playwright)
 
-            if not events:
+            if not result:
                 self.msg_queue.put(("ERROR", "No timetable events could be retrieved."))
             else:
-                save_cached_timetable(events)
-                self.msg_queue.put(("DONE", events))
+                events, student_name = result
+                save_cached_timetable(events, student_name)
+                self.msg_queue.put(("DONE", (events, student_name)))
 
         except Exception as e:
             self.msg_queue.put(("ERROR", f"An error occurred: {str(e)}"))
@@ -335,7 +339,7 @@ class FocusFinderApp:
         browser.close()
 
     def fetch_timetable_data(self, sync_playwright_fn):
-        """Runs headless Playwright automation to collect current & next week, plus previous week from cache."""
+        """Runs headless Playwright automation to collect schedule and extract student name."""
         self.gui_log("[*] Launching browser engine...", "Connecting to Focus portal...")
 
         with sync_playwright_fn() as p:
@@ -387,6 +391,19 @@ class FocusFinderApp:
                 if not login_success:
                     self.gui_log("[!] All re-login attempts failed.")
                     return None
+
+            # Extract Student Name from Homepage h1 element ("Welcome Back, Name")
+            student_name = "Student"
+            try:
+                self.gui_log("[*] Extracting student name from homepage...")
+                h1_text = page.locator("h1.text-3xl.font-bold").inner_text(timeout=5000)
+                if "Welcome Back," in h1_text:
+                    student_name = h1_text.replace("Welcome Back,", "").strip()
+                else:
+                    student_name = h1_text.strip()
+                self.gui_log(f"[+] Found student name: {student_name}")
+            except Exception as e:
+                self.gui_log(f"[!] Could not extract name from h1 tag: {e}")
 
             url = page.url
             i = url.rfind('/')
@@ -474,22 +491,23 @@ class FocusFinderApp:
 
             browser.close()
             self.gui_log(f"[+] Success! Extracted {len(events)} schedule items.", "Data ready!")
-            return events
+            return events, student_name
 
-    def transition_to_timetable(self, events):
+    def transition_to_timetable(self, events, student_name):
         """Destroys the loading UI and renders the interactive Timetable widget."""
         self.progress.stop()
         self.loading_frame.destroy()
 
         # Render Main Timetable View
-        self.timetable_ui = TimetableWidget(self.root, events)
+        self.timetable_ui = TimetableWidget(self.root, events, student_name)
 
 
 class TimetableWidget:
     """Fully Rounded Dark Themed Timetable View Widget."""
-    def __init__(self, root, events):
+    def __init__(self, root, events, student_name):
         self.root = root
         self.events = events
+        self.student_name = student_name
         self.grouped_days = self.process_events(events)
         self.available_dates = sorted(list(self.grouped_days.keys()))
 
@@ -550,6 +568,22 @@ class TimetableWidget:
     def create_widgets(self):
         self.main_container = ctk.CTkFrame(self.root, fg_color=BG_DARK, corner_radius=0)
         self.main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+
+        # --- WELCOME BANNER (Rounded Card) ---
+        welcome_card = ctk.CTkFrame(
+            self.main_container,
+            fg_color=BG_CARD,
+            corner_radius=16
+        )
+        welcome_card.pack(fill=tk.X, pady=(0, 12), ipadx=12, ipady=8)
+
+        welcome_label = ctk.CTkLabel(
+            welcome_card,
+            text=f"Welcome Back, {self.student_name}",
+            font=("Arial", 18, "bold"),
+            text_color=FG_ACCENT
+        )
+        welcome_label.pack(anchor="w", padx=12, pady=6)
 
         # --- TOP NAVIGATION BAR (Rounded Card) ---
         nav_card = ctk.CTkFrame(
