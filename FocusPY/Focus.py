@@ -414,18 +414,19 @@ class FocusFinderApp:
             current_week_events = extract_events(livewire_responses)
             livewire_responses.clear()
 
-            # Collect next week's timetable using the calendar's Next week button
-            try:
-                self.gui_log("[*] Fetching next week's timetable...")
-                page.click(".fc-next-button")
-                page.wait_for_timeout(2000)
-                page.wait_for_load_state("networkidle", timeout=5000)
-            except Exception as e:
-                self.gui_log(f"[!] Could not pull next week automatically: {e}")
-
-            next_week_events = extract_events(livewire_responses)
-
-            all_fetched = current_week_events + next_week_events
+            # Collect an entire month's worth of timetable (current week + 4 subsequent weeks)
+            all_fetched = list(current_week_events)
+            for week_idx in range(4):
+                try:
+                    self.gui_log(f"[*] Fetching week {week_idx + 2}'s timetable...")
+                    page.click(".fc-next-button")
+                    page.wait_for_timeout(2000)
+                    page.wait_for_load_state("networkidle", timeout=5000)
+                    week_events = extract_events(livewire_responses)
+                    all_fetched.extend(week_events)
+                    livewire_responses.clear()
+                except Exception as e:
+                    self.gui_log(f"[!] Could not pull week {week_idx + 2} automatically: {e}")
 
             # Include previous week's events from existing cache if available
             previous_week_events = []
