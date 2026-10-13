@@ -158,7 +158,7 @@ def display_timetable(events):
             # Exclude Saturdays completely (weekday 5 is Saturday)
             if dt_start.weekday() == 5:
                 excluded_saturdays_count += 1
-                log_debug("display", f"Excluding Saturday event: {start_raw} - {ev.get('title')}")
+                log_debug("display", f"Excluding Saturday event: {start_raw} {ev.get('title')}")
                 continue
 
             day_header = dt_start.strftime("%A, %d %B %Y")
@@ -295,20 +295,23 @@ def fetch_timetable(p):
     log_debug("fetch", f"Extracted {len(current_week_events)} events for current week.")
     livewire_responses.clear()
 
-    # Collect next week's timetable using the calendar's Next week button
-    try:
-        log_debug("fetch", "Attempting to click calendar '.fc-next-button' for next week...")
-        page.click(".fc-next-button")
-        page.wait_for_timeout(2000)
-        page.wait_for_load_state("networkidle", timeout=5000)
-        log_debug("fetch", "Successfully clicked next week button.")
-    except Exception as e:
-        log_debug("fetch", f"Could not pull next week automatically via button click: {e}")
+    # Collect an entire month's worth of timetable (current week + 4 subsequent weeks)
+    all_fetched = list(current_week_events)
+    for week_idx in range(4):
+        try:
+            log_debug("fetch", f"Attempting to click calendar '.fc-next-button' for week {week_idx + 2}...")
+            page.click(".fc-next-button")
+            page.wait_for_timeout(2000)
+            page.wait_for_load_state("networkidle", timeout=5000)
+            log_debug("fetch", f"Successfully clicked next week button for week {week_idx + 2}.")
+            week_events = extract_events(livewire_responses)
+            all_fetched.extend(week_events)
+            log_debug("fetch", f"Extracted {len(week_events)} events for week {week_idx + 2}.")
+            livewire_responses.clear()
+        except Exception as e:
+            log_debug("fetch", f"Could not pull week {week_idx + 2} automatically via button click: {e}")
 
-    next_week_events = extract_events(livewire_responses)
-    log_debug("fetch", f"Extracted {len(next_week_events)} events for next week.")
-    all_fetched = current_week_events + next_week_events
-    log_debug("fetch", f"Combined current + next week fetched events count: {len(all_fetched)}")
+    log_debug("fetch", f"Combined current + subsequent weeks fetched events count: {len(all_fetched)}")
 
     # Include previous week's events from existing cache with strict date validation
     previous_week_events = []
