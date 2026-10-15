@@ -1,0 +1,16 @@
+{
+    "FocusKDE": {
+        "name": "FocusKDE",
+        "version": "1.0.0",
+        "description": "Focus KDE",
+        "author": "parroguy",
+        "license": "GPL-3.0",
+        "dependencies": {
+            "kde-frameworks": "^5.80.0"
+        },
+        "Category": "Utilities",
+        "Description": "Focus KDE"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "KPackageStructure": "Plasma/Applet"
+}
