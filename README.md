@@ -11,11 +11,13 @@ A fully functional app running purely in one python file.
 * Windows - Fully working
 * Fedora - Fully Working
 * Debian - Untested
+* Arch - Requires advanced knowledge for installation
 
 
 
 ## Focus Finder on Android
 Working fully
+Does not contain timetable or session cache features at this time 
 
 ## FocusKDE
 A widget for KDE Plasma that allows users to quickly view their timetables whilst running a KDE plasma desktop environment. 
