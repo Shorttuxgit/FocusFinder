@@ -16,9 +16,11 @@ A fully functional app running purely in one python file.
 
 
 ## Focus Finder on Android
-Working fully
+An Android app which supports fetching timetable data,
+And then caching it for the entire week.
+It is written in Kotlin.
 
 ## FocusKDE
 A widget for KDE Plasma that allows users to quickly view their timetables whilst running a KDE plasma desktop environment. 
 
-Wont be started until the completion of Focus Finder on Android.
+Won't be started until the completion of Focus Finder on Android.
