@@ -114,7 +114,7 @@ class FocusFinderApp:
         self.root = root
         self.root.title(f"FocusFinder {CURRENT_OS}")
         self.root.geometry("780x580")
-        self.root.minsize(680, 500)
+        self.root.minsize(680, 680)
         self.root.configure(fg_color=BG_DARK)
 
         apply_app_icon(self.root)
