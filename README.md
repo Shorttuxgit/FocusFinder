@@ -17,7 +17,9 @@ A fully functional app running purely in one python file.
 
 ## Focus Finder on Android
 An Android app which supports fetching timetable data,
-And then caching it for the entire week.
+
+and then caching it for the entire week.
+
 It is written in Kotlin.
 
 ## FocusKDE
