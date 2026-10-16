@@ -10,7 +10,7 @@ A fully functional app running purely in one python file.
 ### Suported Operating Systems
 * Windows - Fully working
 * Fedora - Fully Working
-* Debian - Untested
+* Debian - Fully Working
 * Arch - Requires advanced knowledge for installation
 
 
