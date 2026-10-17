@@ -357,8 +357,10 @@ class focus_main : AppCompatActivity() {
             val wd : week_day = week_day(i, day?.describe()!!);
             wlist.day_list = wlist.day_list + wd;
         }
-
-        var cache_save = week_cached(g.get(Calendar.WEEK_OF_YEAR), wlist);
+        var week_id = g.get(Calendar.WEEK_OF_YEAR);
+        if(g.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
+            week_id--;
+        var cache_save = week_cached(week_id, wlist);
 
         cache_view?.insert(cache_save);
 
@@ -380,36 +382,40 @@ class focus_main : AppCompatActivity() {
             val s = sdfmt.format(date.getTime());
             tview.text = s;
             button2.setOnClickListener {
-                date.add(Calendar.DATE, -1);
-                var dm = date.get(Calendar.DAY_OF_MONTH);
-                var sdfmt = when (dm % 10) {
-                    1 -> sdfmt1;
-                    2 -> sdfmt2;
-                    3 -> sdfmt3;
-                    else -> {
-                        sdfmt4; }
+                if(date.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
+                    date.add(Calendar.DATE, -1);
+                    var dm = date.get(Calendar.DAY_OF_MONTH);
+                    var sdfmt = when (dm % 10) {
+                        1 -> sdfmt1;
+                        2 -> sdfmt2;
+                        3 -> sdfmt3;
+                        else -> {
+                            sdfmt4; }
+                    }
+                    if (dm >= 11 && dm <= 13)
+                        sdfmt = sdfmt4;
+                    val s = sdfmt.format(date.getTime());
+                    tview.text = s;
+                    update_texts();
                 }
-                if (dm >= 11 && dm <= 13)
-                    sdfmt = sdfmt4;
-                val s = sdfmt.format(date.getTime());
-                tview.text = s;
-                update_texts();
             }
             button1.setOnClickListener {
-                date.add(Calendar.DATE, 1);
-                var dm = date.get(Calendar.DAY_OF_MONTH);
-                var sdfmt = when (dm % 10) {
-                    1 -> sdfmt1;
-                    2 -> sdfmt2;
-                    3 -> sdfmt3;
-                    else -> {
-                        sdfmt4; }
+                if(date.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
+                    date.add(Calendar.DATE, 1);
+                    var dm = date.get(Calendar.DAY_OF_MONTH);
+                    var sdfmt = when (dm % 10) {
+                        1 -> sdfmt1;
+                        2 -> sdfmt2;
+                        3 -> sdfmt3;
+                        else -> {
+                            sdfmt4; }
+                    }
+                    if (dm >= 11 && dm <= 13)
+                        sdfmt = sdfmt4;
+                    val s = sdfmt.format(date.getTime());
+                    tview.text = s;
+                    update_texts();
                 }
-                if (dm >= 11 && dm <= 13)
-                    sdfmt = sdfmt4;
-                val s = sdfmt.format(date.getTime());
-                tview.text = s;
-                update_texts();
             }
             button3.setOnClickListener {
                 date = GregorianCalendar();
@@ -609,36 +615,40 @@ class focus_main : AppCompatActivity() {
             val s = sdfmt.format(date.getTime());
             tview.text = s;
             button2.setOnClickListener {
-                date.add(Calendar.DATE, -1);
-                var dm = date.get(Calendar.DAY_OF_MONTH);
-                var sdfmt = when(dm % 10)
-                {
-                    1 -> sdfmt1;
-                    2 -> sdfmt2;
-                    3 -> sdfmt3;
-                    else -> {sdfmt4;}
+                if(date.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
+                    date.add(Calendar.DATE, -1);
+                    var dm = date.get(Calendar.DAY_OF_MONTH);
+                    var sdfmt = when (dm % 10) {
+                        1 -> sdfmt1;
+                        2 -> sdfmt2;
+                        3 -> sdfmt3;
+                        else -> {
+                            sdfmt4; }
+                    }
+                    if (dm >= 11 && dm <= 13)
+                        sdfmt = sdfmt4;
+                    val s = sdfmt.format(date.getTime());
+                    tview.text = s;
+                    update_texts();
                 }
-                if(dm >= 11 && dm <= 13)
-                    sdfmt = sdfmt4;
-                val s = sdfmt.format(date.getTime());
-                tview.text = s;
-                update_texts();
             }
             button1.setOnClickListener {
-                date.add(Calendar.DATE, 1);
-                var dm = date.get(Calendar.DAY_OF_MONTH);
-                var sdfmt = when(dm % 10)
-                {
-                    1 -> sdfmt1;
-                    2 -> sdfmt2;
-                    3 -> sdfmt3;
-                    else -> {sdfmt4;}
+                if(date.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
+                    date.add(Calendar.DATE, 1);
+                    var dm = date.get(Calendar.DAY_OF_MONTH);
+                    var sdfmt = when (dm % 10) {
+                        1 -> sdfmt1;
+                        2 -> sdfmt2;
+                        3 -> sdfmt3;
+                        else -> {
+                            sdfmt4; }
+                    }
+                    if (dm >= 11 && dm <= 13)
+                        sdfmt = sdfmt4;
+                    val s = sdfmt.format(date.getTime());
+                    tview.text = s;
+                    update_texts();
                 }
-                if(dm >= 11 && dm <= 13)
-                    sdfmt = sdfmt4;
-                val s = sdfmt.format(date.getTime());
-                tview.text = s;
-                update_texts();
             }
             button3.setOnClickListener {
                 date = GregorianCalendar();
@@ -664,6 +674,8 @@ class focus_main : AppCompatActivity() {
     {
         var gcur = GregorianCalendar();
         var week_id = gcur.get(Calendar.WEEK_OF_YEAR);
+        if(gcur.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
+            week_id--;
         var has_data = false;
         cache_view?.all_weeks?.observe(this) {
             caches_week -> has_data = load_cache(caches_week.find {
