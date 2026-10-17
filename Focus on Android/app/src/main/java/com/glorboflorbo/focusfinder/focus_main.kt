@@ -1,5 +1,7 @@
 package com.glorboflorbo.focusfinder
 
+import android.app.Application
+import android.content.Context
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.util.Log
@@ -15,6 +17,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
 import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
@@ -25,22 +30,18 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.sqlite.driver.AndroidSQLiteDriver
-import org.json.JSONArray
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.GregorianCalendar
-import org.json.JSONObject
-import androidx.lifecycle.viewModelScope
-import android.app.Application
-import android.content.Context
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.ViewModelProvider
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
-import kotlinx.coroutines.launch
 import com.google.gson.Gson
+import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 import java.lang.Integer.min
+import java.text.SimpleDateFormat
+import java.time.temporal.WeekFields
+import java.util.Calendar
+import java.util.GregorianCalendar
+import java.util.Locale
 
 class timetable_event
 {
@@ -358,7 +359,9 @@ class focus_main : AppCompatActivity() {
             wlist.day_list = wlist.day_list + wd;
         }
         var week_id = g.get(Calendar.WEEK_OF_YEAR);
-        if(g.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
+        val calendar = Calendar.getInstance(Locale.getDefault())
+        val firstDayInt = calendar.getFirstDayOfWeek()
+        if(g.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY && firstDayInt == Calendar.SUNDAY)
             week_id--;
         var cache_save = week_cached(week_id, wlist);
 
@@ -672,9 +675,12 @@ class focus_main : AppCompatActivity() {
     }
     fun do_login()
     {
+        val calendar = Calendar.getInstance(Locale.getDefault())
+        val firstDayInt = calendar.getFirstDayOfWeek()
+
         var gcur = GregorianCalendar();
         var week_id = gcur.get(Calendar.WEEK_OF_YEAR);
-        if(gcur.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
+        if(gcur.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY && firstDayInt == Calendar.SUNDAY)
             week_id--;
         var has_data = false;
         cache_view?.all_weeks?.observe(this) {
