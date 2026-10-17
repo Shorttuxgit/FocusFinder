@@ -1,16 +1,20 @@
 package com.glorboflorbo.focusfinder
 
+import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.util.Log
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -38,10 +42,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.lang.Integer.min
 import java.text.SimpleDateFormat
-import java.time.temporal.WeekFields
 import java.util.Calendar
 import java.util.GregorianCalendar
 import java.util.Locale
+import kotlin.math.abs
 
 class timetable_event
 {
@@ -261,6 +265,52 @@ class focus_inject
         focus_m.load_timetable();
     }
 }
+abstract class gesture_swipe : View.OnTouchListener
+{
+    var gesture_detector : GestureDetector;
+
+    constructor(ctx : Context)
+    {
+        gesture_detector = GestureDetector(ctx, GestureListener());
+    }
+
+    override fun onTouch(p0: View, p1: MotionEvent): Boolean {
+        return gesture_detector.onTouchEvent(p1);
+    }
+    inner class GestureListener : GestureDetector.SimpleOnGestureListener()
+    {
+        override fun onFling(
+            e1: MotionEvent?,
+            e2: MotionEvent,
+            velocityX: Float,
+            velocityY: Float
+        ): Boolean {
+            var result : Boolean = false;
+            try
+            {
+                val diffY = e2.getY() - e1!!.getY()
+                val diffX = e2.getX() - e1.getX()
+                if (abs(diffX) > abs(diffY)) {
+                    if (abs(diffX) > 100 && Math.abs(velocityX) > 100) {
+                        if (diffX > 0) {
+                            onSwipeRight()
+                        } else {
+                            onSwipeLeft()
+                        }
+                        result = true
+                    }
+                }
+            }
+            catch(e : Exception)
+            {
+
+            }
+            return result;
+        }
+    }
+    abstract fun onSwipeLeft()
+    abstract fun onSwipeRight()
+}
 class focus_main : AppCompatActivity() {
     var date : GregorianCalendar = GregorianCalendar();
     var cookies : String? = null;
@@ -290,6 +340,7 @@ class focus_main : AppCompatActivity() {
         }
 
     }
+    @SuppressLint("ClickableViewAccessibility")
     fun update_timetable(events: JSONArray)
     {
         for(i in 0 until 6)
@@ -372,6 +423,7 @@ class focus_main : AppCompatActivity() {
             var button2 = findViewById<Button>(R.id.button2);
             var button1 = findViewById<Button>(R.id.button);
             var button3 = findViewById<Button>(R.id.button3);
+            var scv = findViewById<ScrollView>(R.id.scroll_view);
             var dm = date.get(Calendar.DAY_OF_MONTH);
             var sdfmt = when (dm % 10) {
                 1 -> sdfmt1;
@@ -436,6 +488,45 @@ class focus_main : AppCompatActivity() {
                 tview.text = s;
                 update_texts();
             }
+            scv.setOnTouchListener(object : gesture_swipe(this) {
+                override fun onSwipeRight() {
+                    if(date.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
+                        date.add(Calendar.DATE, -1);
+                        var dm = date.get(Calendar.DAY_OF_MONTH);
+                        var sdfmt = when (dm % 10) {
+                            1 -> sdfmt1;
+                            2 -> sdfmt2;
+                            3 -> sdfmt3;
+                            else -> {
+                                sdfmt4; }
+                        }
+                        if (dm >= 11 && dm <= 13)
+                            sdfmt = sdfmt4;
+                        val s = sdfmt.format(date.getTime());
+                        tview.text = s;
+                        update_texts();
+                    }
+                }
+
+                override fun onSwipeLeft() {
+                    if(date.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
+                        date.add(Calendar.DATE, 1);
+                        var dm = date.get(Calendar.DAY_OF_MONTH);
+                        var sdfmt = when (dm % 10) {
+                            1 -> sdfmt1;
+                            2 -> sdfmt2;
+                            3 -> sdfmt3;
+                            else -> {
+                                sdfmt4; }
+                        }
+                        if (dm >= 11 && dm <= 13)
+                            sdfmt = sdfmt4;
+                        val s = sdfmt.format(date.getTime());
+                        tview.text = s;
+                        update_texts();
+                    }
+                }
+            })
             update_texts();
         }
     }
@@ -578,6 +669,7 @@ class focus_main : AppCompatActivity() {
         }
         webview.loadUrl(url_target);
     }
+    @SuppressLint("ClickableViewAccessibility")
     fun load_cache(week: week_cached?) : Boolean
     {
         if(week == null) {
@@ -606,6 +698,7 @@ class focus_main : AppCompatActivity() {
             var button1 = findViewById<Button>(R.id.button);
             var button3 = findViewById<Button>(R.id.button3);
             var dm = date.get(Calendar.DAY_OF_MONTH);
+            var scv = findViewById<ScrollView>(R.id.scroll_view);
             var sdfmt = when(dm % 10)
             {
                 1 -> sdfmt1;
@@ -669,7 +762,47 @@ class focus_main : AppCompatActivity() {
                 tview.text = s;
                 update_texts();
             }
+            scv.setOnTouchListener(object : gesture_swipe(this) {
+                override fun onSwipeRight() {
+                    if(date.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
+                        date.add(Calendar.DATE, -1);
+                        var dm = date.get(Calendar.DAY_OF_MONTH);
+                        var sdfmt = when (dm % 10) {
+                            1 -> sdfmt1;
+                            2 -> sdfmt2;
+                            3 -> sdfmt3;
+                            else -> {
+                                sdfmt4; }
+                        }
+                        if (dm >= 11 && dm <= 13)
+                            sdfmt = sdfmt4;
+                        val s = sdfmt.format(date.getTime());
+                        tview.text = s;
+                        update_texts();
+                    }
+                }
+
+                override fun onSwipeLeft() {
+                    if(date.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
+                        date.add(Calendar.DATE, 1);
+                        var dm = date.get(Calendar.DAY_OF_MONTH);
+                        var sdfmt = when (dm % 10) {
+                            1 -> sdfmt1;
+                            2 -> sdfmt2;
+                            3 -> sdfmt3;
+                            else -> {
+                                sdfmt4; }
+                        }
+                        if (dm >= 11 && dm <= 13)
+                            sdfmt = sdfmt4;
+                        val s = sdfmt.format(date.getTime());
+                        tview.text = s;
+                        update_texts();
+                    }
+                }
+            })
             update_texts();
+
         }
         return true;
     }
