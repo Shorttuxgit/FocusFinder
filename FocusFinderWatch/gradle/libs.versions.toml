@@ -14,6 +14,7 @@ constraintlayout = "2.1.4"
 room3Common = "3.0.3"
 room3Runtime = "3.0.3"
 roomCompiler = "2.8.5"
+wear = "1.4.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -21,6 +22,7 @@ androidx-lifecycle-compiler = { module = "androidx.lifecycle:lifecycle-compiler"
 androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "roomCompiler" }
 androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "roomCompiler" }
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "roomCompiler" }
+androidx-wear = { module = "androidx.wear:wear", version.ref = "wear" }
 geckoview = { module = "org.mozilla.geckoview:geckoview", version.ref = "geckoview" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }

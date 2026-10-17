@@ -8,6 +8,7 @@
     tools:context=".focus_main">
 
     <ScrollView
+        android:id="@+id/scroll_view"
         android:layout_width="190dp"
         android:layout_height="190dp"
         android:layout_marginStart="1dp"
@@ -23,313 +24,485 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/view7"
-                android:layout_width="match_parent"
-                android:layout_height="81dp"
-                android:paddingTop="56dp"
-                android:singleLine="true"
-                android:text="@string/current_date"
-                android:textAlignment="center"
-                android:textColor="@android:color/system_accent1_600"
-                android:textSize="15dp"
-                android:textStyle="bold" />
-
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="20dp"
                 android:orientation="horizontal">
 
                 <Button
-                    android:id="@+id/button2"
-                    android:layout_width="0dp"
+                    android:id="@+id/exit"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="0.5"
-                    android:backgroundTint="@android:color/system_control_normal_light"
-                    android:text="＜＜ Previous Day"
-                    android:textColor="@color/white"
-                    android:textSize="8dp" />
-
-                <Button
-                    android:id="@+id/button3"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginLeft="5dp"
-                    android:layout_marginRight="5dp"
-                    android:layout_weight="0.3"
-                    android:backgroundTint="@android:color/system_neutral1_400"
-                    android:paddingLeft="5dp"
-                    android:paddingRight="5dp"
-                    android:text="Today"
-                    android:textColor="@color/white"
-                    android:textSize="8dp" />
-
-                <Button
-                    android:id="@+id/button"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="0.5"
-                    android:backgroundTint="@android:color/system_control_normal_light"
-                    android:text="Next Day  ＞＞"
-                    android:textColor="@color/white"
-                    android:textSize="8dp" />
+                    android:layout_margin="0dp"
+                    android:layout_weight="0.05"
+                    android:backgroundTint="@color/design_default_color_error"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:padding="0dp"
+                    android:text="X" />
 
             </LinearLayout>
 
             <View
+                android:id="@+id/view"
+                android:layout_width="match_parent"
+                android:layout_height="2dp"
+                android:background="@color/design_default_color_on_secondary" />
+
+            <TextView
+                android:id="@+id/view7"
+                android:layout_width="match_parent"
+                android:layout_height="22dp"
+                android:singleLine="true"
+                android:text="@string/current_date"
+                android:textAlignment="center"
+                android:textColor="@android:color/system_accent1_600"
+                android:textSize="11dp"
+                android:textStyle="bold" />
+
+            <View
                 android:id="@+id/view10"
                 android:layout_width="match_parent"
-                android:layout_height="1dp"
+                android:layout_height="2dp"
                 android:background="@color/design_default_color_on_secondary" />
 
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="242dp"
+                android:layout_height="120dp"
                 android:layout_weight="0.5"
-                android:orientation="horizontal">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:layout_weight="0.5"
-                    android:orientation="vertical"
-                    android:paddingLeft="20dp">
-
-                    <TextView
-                        android:id="@+id/v1time"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:layout_weight="1"
-                        android:fontFamily="sans-serif"
-                        android:text="View1"
-                        android:textSize="24dp" />
-
-                    <TextView
-                        android:id="@+id/v1room"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:layout_weight="1"
-                        android:text="View1"
-                        android:textSize="18dp" />
-
-                    <TextView
-                        android:id="@+id/v1staff"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:layout_weight="1"
-                        android:text="View1"
-                        android:textSize="16dp" />
-
-                </LinearLayout>
+                android:orientation="vertical">
 
                 <TextView
                     android:id="@+id/v1title"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:layout_marginLeft="25dp"
+                    android:layout_marginLeft="0dp"
                     android:layout_marginTop="0dp"
-                    android:layout_marginRight="10dp"
+                    android:layout_marginRight="0dp"
                     android:layout_weight="0.5"
-                    android:gravity="center"
+                    android:gravity="top"
                     android:paddingRight="5dp"
                     android:text="View1"
                     android:textAlignment="center"
-                    android:textSize="24dp" />
+                    android:textSize="20dp" />
+
+                <View
+                    android:id="@+id/view2"
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_weight="0"
+                    android:background="@color/design_default_color_on_secondary" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_weight="0.4"
+                    android:orientation="horizontal"
+                    android:paddingLeft="10dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/v1time"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="0dp"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:text="View1"
+                            android:textSize="24dp" />
+
+                        <View
+                            android:id="@+id/view6"
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_weight="0"
+                            android:background="@color/design_default_color_on_secondary" />
+
+                        <TextView
+                            android:id="@+id/v1time2"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="0dp"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:text="View1"
+                            android:textSize="24dp" />
+                    </LinearLayout>
+
+                    <View
+                        android:id="@+id/view4"
+                        android:layout_width="1dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="0"
+                        android:background="@color/design_default_color_on_secondary" />
+
+                    <TextView
+                        android:id="@+id/v1room"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="0dp"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:text="View1"
+                        android:textSize="18dp" />
+
+                    <View
+                        android:id="@+id/view5"
+                        android:layout_width="1dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="0"
+                        android:background="@color/design_default_color_on_secondary" />
+
+                    <TextView
+                        android:id="@+id/v1staff"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="0dp"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:text="View1"
+                        android:textSize="16dp" />
+
+                </LinearLayout>
 
             </LinearLayout>
 
             <View
                 android:id="@+id/view11"
                 android:layout_width="match_parent"
-                android:layout_height="1dp"
+                android:layout_height="2dp"
                 android:background="@color/design_default_color_on_secondary" />
 
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="242dp"
-                android:orientation="horizontal">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:layout_weight="0.5"
-                    android:orientation="vertical"
-                    android:paddingLeft="20dp">
-
-                    <TextView
-                        android:id="@+id/v2time"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:layout_weight="0.5"
-                        android:text="View1"
-                        android:textSize="24dp" />
-
-                    <TextView
-                        android:id="@+id/v2room"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:layout_weight="0.5"
-                        android:text="View1"
-                        android:textSize="18dp" />
-
-                    <TextView
-                        android:id="@+id/v2staff"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:layout_weight="0.5"
-                        android:text="View1"
-                        android:textSize="16dp" />
-
-                </LinearLayout>
+                android:layout_height="120dp"
+                android:orientation="vertical">
 
                 <TextView
                     android:id="@+id/v2title"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:layout_marginLeft="25dp"
+                    android:layout_marginLeft="0dp"
                     android:layout_marginTop="0dp"
-                    android:layout_marginRight="10dp"
+                    android:layout_marginRight="0dp"
                     android:layout_weight="0.5"
-                    android:gravity="center"
+                    android:gravity="top"
                     android:paddingRight="5dp"
                     android:text="View1"
                     android:textAlignment="center"
-                    android:textSize="24dp" />
+                    android:textSize="20dp" />
+
+                <View
+                    android:id="@+id/view8"
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_weight="0"
+                    android:background="@color/design_default_color_on_secondary" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_weight="0.4"
+                    android:orientation="horizontal"
+                    android:paddingLeft="10dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_weight="0.5"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/v2time"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="0dp"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:text="View1"
+                            android:textSize="24dp" />
+
+                        <View
+                            android:id="@+id/view16"
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_weight="0"
+                            android:background="@color/design_default_color_on_secondary" />
+
+                        <TextView
+                            android:id="@+id/v2time2"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="0dp"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:text="View1"
+                            android:textSize="24dp" />
+                    </LinearLayout>
+
+                    <View
+                        android:id="@+id/view9"
+                        android:layout_width="1dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="0"
+                        android:background="@color/design_default_color_on_secondary" />
+
+                    <TextView
+                        android:id="@+id/v2room"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="0dp"
+                        android:layout_weight="0.5"
+                        android:gravity="center"
+                        android:text="View1"
+                        android:textSize="18dp" />
+
+                    <View
+                        android:id="@+id/view15"
+                        android:layout_width="1dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="0"
+                        android:background="@color/design_default_color_on_secondary" />
+
+                    <TextView
+                        android:id="@+id/v2staff"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="0dp"
+                        android:layout_weight="0.5"
+                        android:gravity="center"
+                        android:text="View1"
+                        android:textSize="16dp" />
+
+                </LinearLayout>
+
             </LinearLayout>
 
             <View
                 android:id="@+id/view12"
                 android:layout_width="match_parent"
-                android:layout_height="1dp"
+                android:layout_height="2dp"
                 android:background="@color/design_default_color_on_secondary" />
 
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="242dp"
-                android:orientation="horizontal">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:layout_weight="0.5"
-                    android:orientation="vertical"
-                    android:paddingLeft="20dp">
-
-                    <TextView
-                        android:id="@+id/v3time"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:layout_weight="0.5"
-                        android:text="View1"
-                        android:textSize="24dp" />
-
-                    <TextView
-                        android:id="@+id/v3room"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:layout_weight="0.5"
-                        android:text="View1"
-                        android:textSize="18dp" />
-
-                    <TextView
-                        android:id="@+id/v3staff"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:layout_weight="0.5"
-                        android:text="View1"
-                        android:textSize="16dp" />
-                </LinearLayout>
+                android:layout_height="120dp"
+                android:orientation="vertical">
 
                 <TextView
                     android:id="@+id/v3title"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:layout_marginLeft="25dp"
+                    android:layout_marginLeft="0dp"
                     android:layout_marginTop="0dp"
-                    android:layout_marginRight="10dp"
+                    android:layout_marginRight="0dp"
                     android:layout_weight="0.5"
-                    android:gravity="center"
+                    android:gravity="top"
                     android:paddingRight="5dp"
                     android:text="View1"
                     android:textAlignment="center"
-                    android:textSize="24dp" />
+                    android:textSize="20dp" />
+
+                <View
+                    android:id="@+id/view21"
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_weight="0"
+                    android:background="@color/design_default_color_on_secondary" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_weight="0.4"
+                    android:orientation="horizontal"
+                    android:paddingLeft="10dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_weight="0.5"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/v3time"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="0dp"
+                            android:layout_weight="0.5"
+                            android:text="View1"
+                            android:textSize="24dp" />
+
+                        <View
+                            android:id="@+id/view23"
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_weight="0"
+                            android:background="@color/design_default_color_on_secondary" />
+
+                        <TextView
+                            android:id="@+id/v3time2"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="0dp"
+                            android:layout_weight="0.5"
+                            android:text="View1"
+                            android:textSize="24dp" />
+                    </LinearLayout>
+
+                    <View
+                        android:id="@+id/view17"
+                        android:layout_width="1dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="0"
+                        android:background="@color/design_default_color_on_secondary" />
+
+                    <TextView
+                        android:id="@+id/v3room"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="0dp"
+                        android:layout_weight="0.5"
+                        android:gravity="center"
+                        android:text="View1"
+                        android:textSize="18dp" />
+
+                    <View
+                        android:id="@+id/view18"
+                        android:layout_width="1dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="0"
+                        android:background="@color/design_default_color_on_secondary" />
+
+                    <TextView
+                        android:id="@+id/v3staff"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="0dp"
+                        android:layout_weight="0.5"
+                        android:gravity="center"
+                        android:text="View1"
+                        android:textSize="16dp" />
+                </LinearLayout>
+
             </LinearLayout>
 
             <View
                 android:id="@+id/view13"
                 android:layout_width="match_parent"
-                android:layout_height="1dp"
+                android:layout_height="2dp"
                 android:background="@color/design_default_color_on_secondary" />
 
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="242dp"
-                android:orientation="horizontal">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:layout_weight="0.5"
-                    android:orientation="vertical"
-                    android:paddingLeft="20dp">
-
-                    <TextView
-                        android:id="@+id/v4time"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:layout_weight="0.5"
-                        android:text="View1"
-                        android:textSize="24dp" />
-
-                    <TextView
-                        android:id="@+id/v4room"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:layout_weight="0.5"
-                        android:text="View1"
-                        android:textSize="18dp" />
-
-                    <TextView
-                        android:id="@+id/v4staff"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:layout_weight="0.5"
-                        android:text="View1"
-                        android:textSize="16dp" />
-                </LinearLayout>
+                android:layout_height="120dp"
+                android:orientation="vertical">
 
                 <TextView
                     android:id="@+id/v4title"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:layout_marginLeft="25dp"
+                    android:layout_marginLeft="0dp"
                     android:layout_marginTop="0dp"
-                    android:layout_marginRight="10dp"
+                    android:layout_marginRight="0dp"
                     android:layout_weight="0.5"
-                    android:gravity="center"
+                    android:gravity="top"
                     android:paddingRight="5dp"
                     android:text="View1"
                     android:textAlignment="center"
-                    android:textSize="24dp" />
+                    android:textSize="20dp" />
+
+                <View
+                    android:id="@+id/view22"
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_weight="0"
+                    android:background="@color/design_default_color_on_secondary" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_weight="0.4"
+                    android:orientation="horizontal"
+                    android:paddingLeft="10dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_weight="0.5"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/v4time"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="0dp"
+                            android:layout_weight="0.5"
+                            android:text="View1"
+                            android:textSize="24dp" />
+
+                        <View
+                            android:id="@+id/view24"
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_weight="0"
+                            android:background="@color/design_default_color_on_secondary" />
+
+                        <TextView
+                            android:id="@+id/v4time2"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="0dp"
+                            android:layout_weight="0.5"
+                            android:text="View1"
+                            android:textSize="24dp" />
+                    </LinearLayout>
+
+                    <View
+                        android:id="@+id/view19"
+                        android:layout_width="1dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="0"
+                        android:background="@color/design_default_color_on_secondary" />
+
+                    <TextView
+                        android:id="@+id/v4room"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="0dp"
+                        android:layout_weight="0.5"
+                        android:gravity="center"
+                        android:text="View1"
+                        android:textSize="18dp" />
+
+                    <View
+                        android:id="@+id/view20"
+                        android:layout_width="1dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="0"
+                        android:background="@color/design_default_color_on_secondary" />
+
+                    <TextView
+                        android:id="@+id/v4staff"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="0dp"
+                        android:layout_weight="0.5"
+                        android:gravity="center"
+                        android:text="View1"
+                        android:textSize="16dp" />
+                </LinearLayout>
 
             </LinearLayout>
 
             <View
                 android:id="@+id/view14"
                 android:layout_width="match_parent"
-                android:layout_height="1dp"
+                android:layout_height="2dp"
                 android:background="@color/design_default_color_on_secondary" />
 
         </LinearLayout>
