@@ -279,6 +279,10 @@ abstract class gesture_swipe : View.OnTouchListener
     }
     inner class GestureListener : GestureDetector.SimpleOnGestureListener()
     {
+        override fun onDoubleTap(e: MotionEvent): Boolean {
+            onDoubleClick();
+            return true;
+        }
         override fun onFling(
             e1: MotionEvent?,
             e2: MotionEvent,
@@ -308,8 +312,9 @@ abstract class gesture_swipe : View.OnTouchListener
             return result;
         }
     }
-    abstract fun onSwipeLeft()
-    abstract fun onSwipeRight()
+    abstract fun onSwipeLeft();
+    abstract fun onSwipeRight();
+    abstract fun onDoubleClick();
 }
 class focus_main : AppCompatActivity() {
     var date : GregorianCalendar = GregorianCalendar();
@@ -488,6 +493,7 @@ class focus_main : AppCompatActivity() {
                 tview.text = s;
                 update_texts();
             }
+
             scv.setOnTouchListener(object : gesture_swipe(this) {
                 override fun onSwipeRight() {
                     if(date.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
@@ -506,6 +512,23 @@ class focus_main : AppCompatActivity() {
                         tview.text = s;
                         update_texts();
                     }
+                }
+
+                override fun onDoubleClick() {
+                    date = GregorianCalendar();
+                    var dm = date.get(Calendar.DAY_OF_MONTH);
+                    var sdfmt = when (dm % 10) {
+                        1 -> sdfmt1;
+                        2 -> sdfmt2;
+                        3 -> sdfmt3;
+                        else -> {
+                            sdfmt4; }
+                    }
+                    if (dm >= 11 && dm <= 13)
+                        sdfmt = sdfmt4;
+                    val s = sdfmt.format(date.getTime());
+                    tview.text = s;
+                    update_texts();
                 }
 
                 override fun onSwipeLeft() {
@@ -780,6 +803,23 @@ class focus_main : AppCompatActivity() {
                         tview.text = s;
                         update_texts();
                     }
+                }
+
+                override fun onDoubleClick() {
+                    date = GregorianCalendar();
+                    var dm = date.get(Calendar.DAY_OF_MONTH);
+                    var sdfmt = when (dm % 10) {
+                        1 -> sdfmt1;
+                        2 -> sdfmt2;
+                        3 -> sdfmt3;
+                        else -> {
+                            sdfmt4; }
+                    }
+                    if (dm >= 11 && dm <= 13)
+                        sdfmt = sdfmt4;
+                    val s = sdfmt.format(date.getTime());
+                    tview.text = s;
+                    update_texts();
                 }
 
                 override fun onSwipeLeft() {
