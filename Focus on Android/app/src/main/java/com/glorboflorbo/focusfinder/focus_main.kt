@@ -539,10 +539,42 @@ class focus_main : AppCompatActivity() {
         webview.loadUrl(url_target);
 
     }
+    fun load_webview()
+    {
+        var webview = findViewById<WebView>(R.id.web);
+        webview.alpha = 1.0f;
+
+        webview.settings.javaScriptEnabled = true;
+        webview.settings.domStorageEnabled = true;
+
+        var url_target = "https://focus.barton.ac.uk";
+
+        webview.webViewClient = object : WebViewClient()
+        {
+            override fun onPageFinished(view : WebView?, url : String?)
+            {
+                super.onPageFinished(view, url);
+                if(url != "https://focus.barton.ac.uk/login")
+                {
+                    var cookies_ = CookieManager.getInstance().getCookie(url);
+                    if(cookies_ != null && cookies_.contains("session"))
+                    {
+                        cookies = cookies_;
+                        webview.visibility = View.GONE;
+                        Log.println(Log.DEBUG, "dbg", "page finished $url");
+                        finish_login();
+                    }
+                }
+            }
+        }
+        webview.loadUrl(url_target);
+    }
     fun load_cache(week: week_cached?) : Boolean
     {
-        if(week == null)
+        if(week == null) {
+            load_webview();
             return false;
+        }
         init_login();
 
         for(i in 0 until 6)
@@ -638,36 +670,10 @@ class focus_main : AppCompatActivity() {
                 it.week_id == week_id
             })
         };
-        if(has_data)
+        //if(has_data)
             return;
 
-        var webview = findViewById<WebView>(R.id.web);
-        webview.alpha = 1.0f;
 
-        webview.settings.javaScriptEnabled = true;
-        webview.settings.domStorageEnabled = true;
-
-        var url_target = "https://focus.barton.ac.uk";
-
-        webview.webViewClient = object : WebViewClient()
-        {
-            override fun onPageFinished(view : WebView?, url : String?)
-            {
-                super.onPageFinished(view, url);
-                if(url != "https://focus.barton.ac.uk/login")
-                {
-                    var cookies_ = CookieManager.getInstance().getCookie(url);
-                    if(cookies_ != null && cookies_.contains("session"))
-                    {
-                        cookies = cookies_;
-                        webview.visibility = View.GONE;
-                        Log.println(Log.DEBUG, "dbg", "page finished $url");
-                        finish_login();
-                    }
-                }
-            }
-        }
-        webview.loadUrl(url_target);
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
