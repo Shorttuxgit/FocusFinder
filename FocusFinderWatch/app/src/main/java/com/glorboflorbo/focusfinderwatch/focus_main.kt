@@ -37,6 +37,7 @@ import android.content.Context
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.widget.ScrollView
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.ViewModelProvider
 import androidx.room.TypeConverter
@@ -889,6 +890,7 @@ class focus_main : AppCompatActivity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
         cache_view = ViewModelProvider(this)[week_view::class.java];
         enableEdgeToEdge()
         setContentView(R.layout.activity_focus_get)
