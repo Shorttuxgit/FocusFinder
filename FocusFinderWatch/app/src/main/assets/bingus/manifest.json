@@ -1,0 +1,24 @@
+{
+  "manifest_version": 2,
+  "name": "inject_js",
+  "version": "1.0",
+  "description": "Inject callback to fetch.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "inject@slungomatic.com"
+    }
+  },
+  "background":
+    {
+      "scripts": ["content_script.js"]
+    },
+  "permissions": [
+    "nativeMessaging",
+    "nativeMessagingFromContent",
+    "geckoViewAddons",
+    "webRequest",
+    "webRequestBlocking",
+    "webRequestFilterResponse",
+    "<all_urls>"
+  ]
+}

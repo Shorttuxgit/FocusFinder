@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".focus_get">
+
+    <Button
+        android:id="@+id/button4"
+        android:layout_width="31dp"
+        android:layout_height="41dp"
+        android:insetLeft="0dp"
+        android:paddingLeft="0dp"
+        android:paddingTop="0dp"
+        android:paddingRight="0dp"
+        android:paddingBottom="0dp"
+        android:textSize="9dp"
+        android:translationX="135dp"
+        android:translationY="150dp"
+        app:icon="@android:drawable/ic_menu_edit"
+        app:iconPadding="0dp"
+        tools:layout_editor_absoluteX="-13dp"
+        tools:layout_editor_absoluteY="-10dp" />
+    <org.mozilla.geckoview.GeckoView
+        android:id="@+id/geckoview"
+        android:layout_width="190dp"
+        android:layout_height="190dp"
+        android:translationX="0dp"
+        />
+</androidx.constraintlayout.widget.ConstraintLayout>
