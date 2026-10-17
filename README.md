@@ -33,3 +33,8 @@ Thus, using the IOS app for everyday users is not recommended. If you really wan
 A widget for KDE Plasma that allows users to quickly view their timetables whilst running a KDE plasma desktop environment. 
 
 Won't be started until the completion of Focus Finder on Android.
+
+## FocusFinderWatch
+A port of Focus Finder on Android, with support for use on WearOS. Uses geckoview instead of webview, as webview isn't supported by WearOS to log into Focus.
+
+The timetable UI is also changed from Focus on Android to be more watch friendly, and uses gestures as its only way of navigation.
