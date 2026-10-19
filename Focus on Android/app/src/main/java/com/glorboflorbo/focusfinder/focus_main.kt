@@ -400,10 +400,10 @@ class focus_main : AppCompatActivity() {
         var weekd = wdays[d];
         if(weekd == null)
             return;
-        if(weekd.is_raining() || !weekd.is_day)
-            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
-        else
-            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
+        //if(weekd.is_raining() || !weekd.is_day)
+        //    AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
+        //else
+        //    AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
         var weahter = findViewById<TextView>(R.id.weahter);
         var sst : String = "";
         if(weekd.today) {
