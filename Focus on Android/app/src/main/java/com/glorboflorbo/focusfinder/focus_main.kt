@@ -6,21 +6,16 @@ import android.app.Application
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.PictureDrawable
-import android.graphics.drawable.VectorDrawable
 import android.location.Location
-import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Bundle
-import android.os.StrictMode
+import android.os.Looper
 import android.util.Log
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
-import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -30,7 +25,6 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.app.AppCompatDelegate
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -51,12 +45,13 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import com.caverock.androidsvg.SVG
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
 import com.google.gson.Gson
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.lang.Integer.min
-import java.net.HttpURLConnection
 import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -64,6 +59,8 @@ import java.util.Date
 import java.util.GregorianCalendar
 import java.util.Hashtable
 import java.util.Locale
+import java.util.concurrent.Semaphore
+import java.util.concurrent.TimeUnit
 import java.util.stream.Collectors
 import javax.net.ssl.HttpsURLConnection
 import kotlin.concurrent.thread
@@ -376,6 +373,7 @@ class focus_main : AppCompatActivity() {
     var web_view : WebView? = null;
     var nulltimetable_day : timetable_day? = null;
     var cache_view : week_view? = null;
+    var fusedLocationClient: FusedLocationProviderClient? = null;
     fun update_texts()
     {
         var d = date.get(Calendar.DAY_OF_WEEK) - 2;
@@ -744,29 +742,73 @@ class focus_main : AppCompatActivity() {
         }
 
     }
+    data class fuck_you_kotlin(var d : Double);
+    fun get_long_lat_ip(long : fuck_you_kotlin, lat : fuck_you_kotlin)
+    {
+        Log.println(Log.DEBUG, "tg", "USING LONG_LAT_IP");
+        var sb : StringBuilder = StringBuilder();
+        var url = URL("https", "ipinfo.io", 443, "");
+        with(url.openConnection() as HttpsURLConnection)
+        {
+            setRequestProperty("User-Agent", "curl/7.81.0");
+            val reader = getInputStream().bufferedReader();
+            var line: String = reader.readText();
+            sb.append(line);
+        }
+        var str_res = sb.toString();
+        var json = JSONObject(str_res);
+
+        val loc = json.getString("loc");
+        val loc_s = loc.split(",");
+        val longitude = loc_s[1].toDouble();
+        val latitude = loc_s[0].toDouble();
+
+        long.d = longitude;
+        lat.d = latitude;
+    }
+    fun get_long_lat_net(long : fuck_you_kotlin, lat : fuck_you_kotlin) : Boolean
+    {
+        if(checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+        {
+            requestPermissions(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION), 0);
+            if(checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+                return false;
+        }
+        val lm : LocationManager = getSystemService(LOCATION_SERVICE) as LocationManager;
+        var location: Location? = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+        if(location == null) {
+            val s = Semaphore(0);
+            fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+            fusedLocationClient!!.lastLocation.addOnSuccessListener { loc ->
+                location = loc;
+                s.release();
+            };
+            s.tryAcquire(1000, TimeUnit.MILLISECONDS);
+            if(location == null)
+                return false;
+        }
+        long.d = location.longitude;
+        lat.d = location.latitude;
+        return true;
+    }
     fun load_weather(cont : () -> Unit)
     {
         // haha fuck your location settings
         var th = thread(isDaemon = true) {
             var sb : StringBuilder = StringBuilder();
             try {
-                var url = URL("https", "ipinfo.io", 443, "");
-                with(url.openConnection() as HttpsURLConnection)
-                {
-                    setRequestProperty("User-Agent", "curl/7.81.0");
-                    val reader = getInputStream().bufferedReader();
-                    var line: String = reader.readText();
-                    sb.append(line);
-                }
-                var str_res = sb.toString();
-                var json = JSONObject(str_res);
-
-                val loc = json.getString("loc");
-                val loc_s = loc.split(",");
-                val longitude = loc_s[1].toDouble();
-                val latitude = loc_s[0].toDouble();
-
-                sb.clear();
+                Looper.prepare();
+                var url : URL;
+                var str_res : String;
+                var json : JSONObject;
+                var latd : fuck_you_kotlin = fuck_you_kotlin(0.0);
+                var longd : fuck_you_kotlin = fuck_you_kotlin(0.0);
+                var latitude : Double;
+                var longitude : Double;
+                if(!get_long_lat_net(longd, latd))
+                    get_long_lat_ip(longd, latd);
+                latitude = latd.d;
+                longitude = longd.d;
 
                 val gc : GregorianCalendar = GregorianCalendar();
                 gc.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY);
