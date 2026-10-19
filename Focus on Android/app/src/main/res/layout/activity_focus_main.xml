@@ -7,13 +7,6 @@
     android:layout_height="match_parent"
     tools:context=".focus_main">
 
-    <WebView
-        android:id="@+id/web2"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:alpha="1"
-        android:visibility="gone" />
-
     <ScrollView
         android:id="@+id/scroll_view"
         android:layout_width="409dp"
@@ -31,17 +24,48 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/view7"
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="100dp"
-                android:paddingTop="32dp"
-                android:singleLine="true"
-                android:text="@string/current_date"
-                android:textAlignment="center"
-                android:textColor="@android:color/system_accent1_300"
-                android:textSize="28dp"
-                android:textStyle="bold" />
+                android:layout_height="match_parent"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/view7"
+                        android:layout_width="352dp"
+                        android:layout_height="50dp"
+                        android:gravity="center"
+                        android:singleLine="true"
+                        android:text="@string/current_date"
+                        android:textAlignment="center"
+                        android:textColor="@android:color/system_accent1_300"
+                        android:textSize="24dp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/weahter"
+                        android:layout_width="match_parent"
+                        android:layout_height="25dp"
+                        android:gravity="center"
+                        android:singleLine="true"
+                        android:text="@string/current_date"
+                        android:textAlignment="center"
+                        android:textColor="@android:color/system_accent1_300"
+                        android:textSize="19dp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <ImageView
+                    android:id="@+id/imageView"
+                    android:layout_width="32dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="0.2"
+                    app:srcCompat="@mipmap/ic_launcher" />
+            </LinearLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -88,7 +112,7 @@
                 android:id="@+id/view10"
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="@color/white" />
+                android:background="@color/separator" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -153,7 +177,7 @@
                 android:id="@+id/view11"
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="@color/white" />
+                android:background="@color/separator" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -215,7 +239,7 @@
                 android:id="@+id/view12"
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="@color/white" />
+                android:background="@color/separator" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -276,7 +300,7 @@
                 android:id="@+id/view13"
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="@color/white" />
+                android:background="@color/separator" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -338,7 +362,7 @@
                 android:id="@+id/view14"
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:background="@color/white" />
+                android:background="@color/separator" />
 
         </LinearLayout>
     </ScrollView>

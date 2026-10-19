@@ -1,10 +1,19 @@
 package com.glorboflorbo.focusfinder
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.os.Bundle
+import android.os.StrictMode
 import android.util.Log
 import android.view.GestureDetector
 import android.view.MotionEvent
@@ -14,10 +23,13 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.AndroidViewModel
@@ -41,10 +53,16 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.lang.Integer.min
+import java.net.HttpURLConnection
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
 import java.util.GregorianCalendar
+import java.util.Hashtable
 import java.util.Locale
+import java.util.stream.Collectors
+import kotlin.concurrent.thread
 import kotlin.math.abs
 
 class timetable_event
@@ -127,7 +145,7 @@ class timetable_day
 
                 add_ev(timetable_event(time_start, time_end, title, room, staff));
             }
-            catch(e : IndexOutOfBoundsException)
+            catch(e : Exception)
             {
 
             }
@@ -316,6 +334,29 @@ abstract class gesture_swipe : View.OnTouchListener
     abstract fun onSwipeRight();
     abstract fun onDoubleClick();
 }
+class weather_day
+{
+    var min_temp : Double;
+    var max_temp : Double;
+    var wbitmap : Bitmap;
+    var rainp : Double;
+    var is_day : Boolean;
+    var today : Boolean;
+
+    constructor(mt : Double, mxt : Double, wb : Bitmap, ranp : Double, is_dy : Boolean, t : Boolean)
+    {
+        min_temp = mt;
+        max_temp = mxt;
+        wbitmap = wb;
+        rainp = ranp;
+        is_day = is_dy;
+        today = t;
+    }
+    fun is_raining() : Boolean
+    {
+        return (rainp > 0.01);
+    }
+}
 class focus_main : AppCompatActivity() {
     var date : GregorianCalendar = GregorianCalendar();
     var cookies : String? = null;
@@ -325,8 +366,10 @@ class focus_main : AppCompatActivity() {
     var sdfmt1 : SimpleDateFormat = SimpleDateFormat("EEEE, dd'st' MMMM yyyy");
     var json_sdf : SimpleDateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     var days = arrayOfNulls<timetable_day>(6);
+    var wdays = arrayOfNulls<weather_day>(7);
     var views = arrayOfNulls<timetable_view>(4);
     var lbody : String? = null;
+    var web_view : WebView? = null;
     var nulltimetable_day : timetable_day? = null;
     var cache_view : week_view? = null;
     fun update_texts()
@@ -343,7 +386,39 @@ class focus_main : AppCompatActivity() {
             Log.println(Log.DEBUG, "dbg", "$i has ${views[i]} with day ${day}");
             views[i]?.set_info(day?.events[i]!!);
         }
-
+        update_weather_day();
+    }
+    fun update_weather_day()
+    {
+        var d = date.get(Calendar.DAY_OF_WEEK) - 2;
+        if(d < 0)
+            d = 6;
+        var weekd = wdays[d];
+        if(weekd == null)
+            return;
+        if(weekd.is_raining() || !weekd.is_day)
+            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
+        else
+            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
+        var weahter = findViewById<TextView>(R.id.weahter);
+        var sst : String = "";
+        if(weekd.today) {
+            if (weekd.is_raining())
+                sst += "Rain, ";
+            if (weekd.is_day)
+                sst += "Day";
+            else
+                sst += "Night";
+        }
+        else if (weekd.is_raining())
+            sst += "Rain";
+        sst += " (${weekd.min_temp}°C - ${weekd.max_temp}°C)"
+        weahter.text = sst;
+        var iview = findViewById<ImageView>(R.id.imageView);
+        iview.setImageBitmap(weekd.wbitmap);
+        iview.setAdjustViewBounds(true);
+        val drawable : Drawable = BitmapDrawable(getResources(), weekd.wbitmap);
+        iview.setImageDrawable(drawable);
     }
     @SuppressLint("ClickableViewAccessibility")
     fun update_timetable(events: JSONArray)
@@ -379,10 +454,10 @@ class focus_main : AppCompatActivity() {
 
                 day = dt_start.get(Calendar.DAY_OF_WEEK) - 2;
                 if(day < 0)
-                    throw Error();
+                    throw Exception();
 
             }
-            catch(e : Error)
+            catch(e : Exception)
             {
                 continue;
             }
@@ -553,13 +628,215 @@ class focus_main : AppCompatActivity() {
             update_texts();
         }
     }
-    fun load_timetable()
+    fun weather_code_to_url(weather_code : Int, is_day : Boolean) : String
     {
-        if(lbody == null)
-            return;
+        return when (weather_code) {
 
-        runOnUiThread{
+            0 -> if (is_day) "http://openweathermap.org/img/wn/01d@2x.png"
+            else "http://openweathermap.org/img/wn/01n@2x.png"
 
+            1 -> if (is_day) "http://openweathermap.org/img/wn/01d@2x.png"
+            else "http://openweathermap.org/img/wn/01n@2x.png"
+
+            2 -> if (is_day) "http://openweathermap.org/img/wn/02d@2x.png"
+            else "http://openweathermap.org/img/wn/02n@2x.png"
+
+            3 -> if (is_day) "http://openweathermap.org/img/wn/03d@2x.png"
+            else "http://openweathermap.org/img/wn/03n@2x.png"
+
+            45 -> if (is_day) "http://openweathermap.org/img/wn/50d@2x.png"
+            else "http://openweathermap.org/img/wn/50n@2x.png"
+
+            48 -> if (is_day) "http://openweathermap.org/img/wn/50d@2x.png"
+            else "http://openweathermap.org/img/wn/50n@2x.png"
+
+            51 -> if (is_day) "http://openweathermap.org/img/wn/09d@2x.png"
+            else "http://openweathermap.org/img/wn/09n@2x.png"
+
+            53 -> if (is_day) "http://openweathermap.org/img/wn/09d@2x.png"
+            else "http://openweathermap.org/img/wn/09n@2x.png"
+
+            55 -> if (is_day) "http://openweathermap.org/img/wn/09d@2x.png"
+            else "http://openweathermap.org/img/wn/09n@2x.png"
+
+            56 -> if (is_day) "http://openweathermap.org/img/wn/09d@2x.png"
+            else "http://openweathermap.org/img/wn/09n@2x.png"
+
+            57 -> if (is_day) "http://openweathermap.org/img/wn/09d@2x.png"
+            else "http://openweathermap.org/img/wn/09n@2x.png"
+
+            61 -> if (is_day) "http://openweathermap.org/img/wn/10d@2x.png"
+            else "http://openweathermap.org/img/wn/10n@2x.png"
+
+            63 -> if (is_day) "http://openweathermap.org/img/wn/10d@2x.png"
+            else "http://openweathermap.org/img/wn/10n@2x.png"
+
+            65 -> if (is_day) "http://openweathermap.org/img/wn/10d@2x.png"
+            else "http://openweathermap.org/img/wn/10n@2x.png"
+
+            66 -> if (is_day) "http://openweathermap.org/img/wn/10d@2x.png"
+            else "http://openweathermap.org/img/wn/10n@2x.png"
+
+            67 -> if (is_day) "http://openweathermap.org/img/wn/10d@2x.png"
+            else "http://openweathermap.org/img/wn/10n@2x.png"
+
+            71 -> if (is_day) "http://openweathermap.org/img/wn/13d@2x.png"
+            else "http://openweathermap.org/img/wn/13n@2x.png"
+
+            73 -> if (is_day) "http://openweathermap.org/img/wn/13d@2x.png"
+            else "http://openweathermap.org/img/wn/13n@2x.png"
+
+            75 -> if (is_day) "http://openweathermap.org/img/wn/13d@2x.png"
+            else "http://openweathermap.org/img/wn/13n@2x.png"
+
+            77 -> if (is_day) "http://openweathermap.org/img/wn/13d@2x.png"
+            else "http://openweathermap.org/img/wn/13n@2x.png"
+
+            80 -> if (is_day) "http://openweathermap.org/img/wn/09d@2x.png"
+            else "http://openweathermap.org/img/wn/09n@2x.png"
+
+            81 -> if (is_day) "http://openweathermap.org/img/wn/09d@2x.png"
+            else "http://openweathermap.org/img/wn/09n@2x.png"
+
+            82 -> if (is_day) "http://openweathermap.org/img/wn/09d@2x.png"
+            else "http://openweathermap.org/img/wn/09n@2x.png"
+
+            85 -> if (is_day) "http://openweathermap.org/img/wn/13d@2x.png"
+            else "http://openweathermap.org/img/wn/13n@2x.png"
+
+            86 -> if (is_day) "http://openweathermap.org/img/wn/13d@2x.png"
+            else "http://openweathermap.org/img/wn/13n@2x.png"
+
+            95 -> if (is_day) "http://openweathermap.org/img/wn/11d@2x.png"
+            else "http://openweathermap.org/img/wn/11n@2x.png"
+
+            96 -> if (is_day) "http://openweathermap.org/img/wn/11d@2x.png"
+            else "http://openweathermap.org/img/wn/11n@2x.png"
+
+            99 -> if (is_day) "http://openweathermap.org/img/wn/11d@2x.png"
+            else "http://openweathermap.org/img/wn/11n@2x.png"
+
+            else -> ""
+
+        }
+    }
+    fun load_weather_days(obj : JSONObject)
+    {
+        var daily = obj.getJSONObject("daily");
+        var current = obj.getJSONObject("current");
+        var time = daily.getJSONArray("time");
+        var wcode = daily.getJSONArray("weather_code");
+        var atemp_max = daily.getJSONArray("apparent_temperature_max");
+        var atemp_min = daily.getJSONArray("apparent_temperature_min");
+        var rain_s = daily.getJSONArray("rain_sum");
+
+        var hash_v = Hashtable<Int, Bitmap>();
+
+        for(i in 0 until time.length())
+        {
+            var tm = time.getLong(i);
+            var day = Date(tm*1000);
+            var greg = GregorianCalendar();
+            greg.time = day;
+            val day_idx : Int = when(greg.get(Calendar.DAY_OF_WEEK))
+            {
+                Calendar.SUNDAY -> 6;
+                else -> {
+                    greg.get((Calendar.DAY_OF_WEEK))-2;
+                }
+            }
+
+            Log.println(Log.DEBUG, "tg", "day_idx: ${day_idx}, ${greg.get(Calendar.DAY_OF_WEEK)}, ${tm}, ${day.day}");
+
+            var weather_code = wcode.getInt(i);
+            var temp_min = atemp_min.getDouble(i);
+            var temp_max = atemp_max.getDouble(i);
+            var rains = rain_s.getDouble(i);
+            var is_day = true;
+            var bitmap : Bitmap? = null;
+
+            if(greg.get(Calendar.DAY_OF_WEEK)==(GregorianCalendar()).get(Calendar.DAY_OF_WEEK))
+                is_day = current.getInt("is_day") != 0;
+
+            if(hash_v[weather_code + (if (is_day) (256) else (0))] != null)
+                bitmap = hash_v[weather_code + (if (is_day) (256) else (0))]!!;
+
+            if(bitmap == null)
+            {
+                val url: String = weather_code_to_url(weather_code, is_day).substring(7);
+                val aurl = URL(
+                    "http", url.split("/")[0], 80, url.split("/").stream().skip(1).collect(
+                        Collectors.joining("/")
+                    )
+                );
+
+                with(aurl.openConnection() as HttpURLConnection)
+                {
+                    setRequestProperty("User-Agent", "curl/7.81.0");
+                    var bm_img: Bitmap = BitmapFactory.decodeStream(getInputStream());
+                    bitmap = bm_img;
+                    hash_v[weather_code + (if (is_day) (256) else (0))] = bitmap;
+                }
+                Log.println(Log.DEBUG, "tag","weather_code: ${weather_code}, url: ${url}");
+            }
+
+            wdays[day_idx] = weather_day(temp_min, temp_max, bitmap!!, rains, is_day,greg.get(Calendar.DAY_OF_WEEK)==(GregorianCalendar()).get(Calendar.DAY_OF_WEEK));
+        }
+
+    }
+    fun load_weather(cont : () -> Unit)
+    {
+        // haha fuck your location settings
+        var th = thread(isDaemon = true) {
+            var sb : StringBuilder = StringBuilder();
+            try {
+                var url = URL("http", "ipinfo.io", 80, "");
+                with(url.openConnection() as HttpURLConnection)
+                {
+                    setRequestProperty("User-Agent", "curl/7.81.0");
+                    val reader = getInputStream().bufferedReader();
+                    var line: String = reader.readText();
+                    sb.append(line);
+                }
+                var str_res = sb.toString();
+                var json = JSONObject(str_res);
+
+                val loc = json.getString("loc");
+                val loc_s = loc.split(",");
+                val longitude = loc_s[1].toDouble();
+                val latitude = loc_s[0].toDouble();
+
+                sb.clear();
+
+                url = URL("https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weather_code,apparent_temperature_max,apparent_temperature_min,rain_sum&current=is_day&timezone=auto&timeformat=unixtime");
+                Log.println(Log.DEBUG, "tg", "url: ${url.toURI()}");
+                with(url.openConnection() as HttpURLConnection)
+                {
+                    setRequestProperty("User-Agent", "curl/7.81.0");
+                    val reader = getInputStream().bufferedReader();
+                    var line: String = reader.readText();
+                    sb.append(line);
+                }
+
+                str_res = sb.toString();
+
+                json = JSONObject(str_res);
+
+                load_weather_days(json);
+
+
+                //Log.println(Log.DEBUG, "tag", "weather data: ${str_res}");
+            }
+            catch(e : Exception)
+            {
+                Log.println(Log.DEBUG, "except", "${e.printStackTrace()}");
+            }
+            cont();
+        }
+    }
+    fun continue_timetable()
+    {
+        runOnUiThread {
             try {
                 var json_obj = JSONObject(lbody!!);
                 var jlist_1 = json_obj.getJSONArray("components");
@@ -577,9 +854,33 @@ class focus_main : AppCompatActivity() {
                         }
                     }
                 }
-            } catch (e: Error) {
+            } catch (e: Exception) {
                 Log.println(Log.DEBUG, "dbge", e.toString());
             }
+        }
+    }
+    fun load_timetable()
+    {
+        if(lbody == null)
+            return;
+
+        runOnUiThread{
+
+            web_view!!.webViewClient = WebViewClient();
+            val d = findViewById<ConstraintLayout>(R.id.main)
+            d.removeView(web_view!!);
+            web_view!!.clearHistory();
+            web_view!!.clearCache(true);
+            web_view!!.loadUrl("about:blank");
+            web_view!!.onPause();
+            web_view!!.removeAllViews();
+            web_view!!.destroyDrawingCache();
+            web_view!!.pauseTimers();
+            web_view!!.destroy();
+
+            init_login();
+
+            load_weather(::continue_timetable);
         }
     }
     fun init_login()
@@ -612,6 +913,8 @@ class focus_main : AppCompatActivity() {
     fun finish_login()
     {
         init_login();
+
+        /*
 
         var webview = findViewById<WebView>(R.id.web2);
 
@@ -659,25 +962,57 @@ class focus_main : AppCompatActivity() {
             }
         }
         CookieManager.getInstance().setCookie(url_target, cookies);
-        webview.loadUrl(url_target);
+        webview.loadUrl(url_target);*/
 
     }
     fun load_webview()
     {
-        var webview = findViewById<WebView>(R.id.web);
-        webview.alpha = 1.0f;
+        setContentView(R.layout.activity_focus_get)
+        web_view = findViewById<WebView>(R.id.web);
+        web_view!!.alpha = 1.0f;
 
-        webview.settings.javaScriptEnabled = true;
-        webview.settings.domStorageEnabled = true;
+        web_view!!.settings.javaScriptEnabled = true;
+        web_view!!.settings.domStorageEnabled = true;
 
         var url_target = "https://focus.barton.ac.uk";
 
-        webview.webViewClient = object : WebViewClient()
+        web_view!!.addJavascriptInterface(focus_inject(this), "AndroidFocusInjection");
+
+        web_view!!.webViewClient = object : WebViewClient()
         {
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                if(url == null)
+                    return;
+                if(!url.contains("timetable"))
+                    return;
+
+                Log.println(Log.DEBUG, "dbg2", "Got ON PAGE STARTED");
+                view?.evaluateJavascript("(function() {const original_fetch = window.fetch; window.fetch = async (...args) => {const [url, options] = args; const response = await original_fetch(...args); if(options && options.method && options.method == 'POST') { try {const c = response.clone(); const url = c.url; const body = await c.text(); AndroidFocusInjection.handle_post(url, body); } catch (e) {} } return response; }; } )();", null);
+            }
             override fun onPageFinished(view : WebView?, url : String?)
             {
                 super.onPageFinished(view, url);
-                if(url != "https://focus.barton.ac.uk/login")
+                if(url == null)
+                    return;
+                if(!url.contains("home") || !url.contains("focus"))
+                    return;
+
+
+                var url_got = url;
+                Log.println(Log.DEBUG, "dbg", url_got);
+                var idx = url.indexOfLast {
+                    it == '/'
+                }
+                if(idx < 0)
+                    return;
+
+                var url_timetable = url.subSequence(0, idx+1).toString() + "timetable";
+                Log.println(Log.DEBUG, "dbg", url_timetable);
+
+                view?.loadUrl(url_timetable);
+
+                /*if(url != "https://focus.barton.ac.uk/login")
                 {
                     var cookies_ = CookieManager.getInstance().getCookie(url);
                     if(cookies_ != null && cookies_.contains("session"))
@@ -687,35 +1022,16 @@ class focus_main : AppCompatActivity() {
                         Log.println(Log.DEBUG, "dbg", "page finished $url");
                         finish_login();
                     }
-                }
+                }*/
             }
         }
-        webview.loadUrl(url_target);
+        web_view!!.loadUrl(url_target);
     }
     @SuppressLint("ClickableViewAccessibility")
-    fun load_cache(week: week_cached?) : Boolean
+    fun continue_cache()
     {
-        if(week == null) {
-            load_webview();
-            return false;
-        }
-        init_login();
-
-        for(i in 0 until 6)
-        {
-            days[i] = timetable_day(i);
-        }
-        val len = min(week.week_days.day_list.size, 6);
-        for(i in 0 until len)
-        {
-            val week = week.week_days.day_list[i];
-
-            Log.println(Log.DEBUG, "dbgp", "${week.week_day_data}")
-
-            days[week.week_day]?.interpret(week.week_day_data);
-        }
-
         runOnUiThread {
+            update_weather_day();
             var tview = findViewById<TextView>(R.id.view7);
             var button2 = findViewById<Button>(R.id.button2);
             var button1 = findViewById<Button>(R.id.button);
@@ -844,6 +1160,30 @@ class focus_main : AppCompatActivity() {
             update_texts();
 
         }
+    }
+    fun load_cache(week: week_cached?) : Boolean
+    {
+        if(week == null) {
+            load_webview();
+            return false;
+        }
+        init_login();
+
+        for(i in 0 until 6)
+        {
+            days[i] = timetable_day(i);
+        }
+        val len = min(week.week_days.day_list.size, 6);
+        for(i in 0 until len)
+        {
+            val week = week.week_days.day_list[i];
+
+            Log.println(Log.DEBUG, "dbgp", "${week.week_day_data}")
+
+            days[week.week_day]?.interpret(week.week_day_data);
+        }
+
+        load_weather(::continue_cache);
         return true;
     }
     fun do_login()
@@ -870,7 +1210,7 @@ class focus_main : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         cache_view = ViewModelProvider(this)[week_view::class.java];
         enableEdgeToEdge()
-        setContentView(R.layout.activity_focus_get)
+        setContentView(R.layout.activity_focus_main)
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
