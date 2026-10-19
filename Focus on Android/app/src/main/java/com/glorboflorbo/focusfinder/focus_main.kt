@@ -9,6 +9,8 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.PictureDrawable
+import android.graphics.drawable.VectorDrawable
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
@@ -48,6 +50,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
+import com.caverock.androidsvg.SVG
 import com.google.gson.Gson
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -62,6 +65,7 @@ import java.util.GregorianCalendar
 import java.util.Hashtable
 import java.util.Locale
 import java.util.stream.Collectors
+import javax.net.ssl.HttpsURLConnection
 import kotlin.concurrent.thread
 import kotlin.math.abs
 
@@ -338,16 +342,16 @@ class weather_day
 {
     var min_temp : Double;
     var max_temp : Double;
-    var wbitmap : Bitmap;
+    var wdraw : Drawable;
     var rainp : Double;
     var is_day : Boolean;
     var today : Boolean;
 
-    constructor(mt : Double, mxt : Double, wb : Bitmap, ranp : Double, is_dy : Boolean, t : Boolean)
+    constructor(mt : Double, mxt : Double, wb : Drawable, ranp : Double, is_dy : Boolean, t : Boolean)
     {
         min_temp = mt;
         max_temp = mxt;
-        wbitmap = wb;
+        wdraw = wb;
         rainp = ranp;
         is_day = is_dy;
         today = t;
@@ -415,10 +419,7 @@ class focus_main : AppCompatActivity() {
         sst += " (${weekd.min_temp}°C - ${weekd.max_temp}°C)"
         weahter.text = sst;
         var iview = findViewById<ImageView>(R.id.imageView);
-        iview.setImageBitmap(weekd.wbitmap);
-        iview.setAdjustViewBounds(true);
-        val drawable : Drawable = BitmapDrawable(getResources(), weekd.wbitmap);
-        iview.setImageDrawable(drawable);
+        iview.setImageDrawable(weekd.wdraw);
     }
     @SuppressLint("ClickableViewAccessibility")
     fun update_timetable(events: JSONArray)
@@ -632,92 +633,45 @@ class focus_main : AppCompatActivity() {
     {
         return when (weather_code) {
 
-            0 -> if (is_day) "http://openweathermap.org/img/wn/01d@2x.png"
-            else "http://openweathermap.org/img/wn/01n@2x.png"
+            0 -> if (is_day) "clear-day" else "clear-night"
+            1 -> if (is_day) "clear-day" else "clear-night"
 
-            1 -> if (is_day) "http://openweathermap.org/img/wn/01d@2x.png"
-            else "http://openweathermap.org/img/wn/01n@2x.png"
+            2 -> if (is_day) "partly-cloudy-day" else "partly-cloudy-night"
 
-            2 -> if (is_day) "http://openweathermap.org/img/wn/02d@2x.png"
-            else "http://openweathermap.org/img/wn/02n@2x.png"
+            3 -> if (is_day) "cloudy" else "cloudy"
 
-            3 -> if (is_day) "http://openweathermap.org/img/wn/03d@2x.png"
-            else "http://openweathermap.org/img/wn/03n@2x.png"
+            45 -> if (is_day) "fog-day" else "fog-night"
+            48 -> if (is_day) "haze-day" else "haze-night"
 
-            45 -> if (is_day) "http://openweathermap.org/img/wn/50d@2x.png"
-            else "http://openweathermap.org/img/wn/50n@2x.png"
+            51 -> if (is_day) "partly-cloudy-day-drizzle" else "partly-cloudy-night-drizzle"
+            53 -> if (is_day) "drizzle" else "drizzle"
+            55 -> if (is_day) "extreme-day-drizzle" else "extreme-night-drizzle"
+            56 -> if (is_day) "overcast-drizzle" else "overcast-drizzle"
+            57 -> if (is_day) "extreme-drizzle" else "extreme-drizzle"
 
-            48 -> if (is_day) "http://openweathermap.org/img/wn/50d@2x.png"
-            else "http://openweathermap.org/img/wn/50n@2x.png"
+            61 -> if (is_day) "partly-cloudy-day-rain" else "partly-cloudy-night-rain"
+            63 -> if (is_day) "rain" else "rain"
+            65 -> if (is_day) "extreme-day-rain" else "extreme-night-rain"
+            66 -> if (is_day) "overcast-rain" else "overcast-rain"
+            67 -> if (is_day) "extreme-rain" else "extreme-rain"
 
-            51 -> if (is_day) "http://openweathermap.org/img/wn/09d@2x.png"
-            else "http://openweathermap.org/img/wn/09n@2x.png"
+            71 -> if (is_day) "partly-cloudy-day-snow" else "partly-cloudy-night-snow"
+            73 -> if (is_day) "snow" else "snow"
+            75 -> if (is_day) "extreme-day-snow" else "extreme-night-snow"
+            77 -> if (is_day) "extreme-snow" else "extreme-snow"
 
-            53 -> if (is_day) "http://openweathermap.org/img/wn/09d@2x.png"
-            else "http://openweathermap.org/img/wn/09n@2x.png"
+            80 -> if (is_day) "mostly-clear-day-rain" else "mostly-clear-night-rain"
+            81 -> if (is_day) "mostly-clear-day-rain" else "mostly-clear-night-rain"
+            82 -> if (is_day) "extreme-day-rain" else "extreme-night-rain"
 
-            55 -> if (is_day) "http://openweathermap.org/img/wn/09d@2x.png"
-            else "http://openweathermap.org/img/wn/09n@2x.png"
+            85 -> if (is_day) "mostly-clear-day-snow" else "mostly-clear-night-snow"
+            86 -> if (is_day) "mostly-clear-day-snow" else "mostly-clear-night-snow"
 
-            56 -> if (is_day) "http://openweathermap.org/img/wn/09d@2x.png"
-            else "http://openweathermap.org/img/wn/09n@2x.png"
-
-            57 -> if (is_day) "http://openweathermap.org/img/wn/09d@2x.png"
-            else "http://openweathermap.org/img/wn/09n@2x.png"
-
-            61 -> if (is_day) "http://openweathermap.org/img/wn/10d@2x.png"
-            else "http://openweathermap.org/img/wn/10n@2x.png"
-
-            63 -> if (is_day) "http://openweathermap.org/img/wn/10d@2x.png"
-            else "http://openweathermap.org/img/wn/10n@2x.png"
-
-            65 -> if (is_day) "http://openweathermap.org/img/wn/10d@2x.png"
-            else "http://openweathermap.org/img/wn/10n@2x.png"
-
-            66 -> if (is_day) "http://openweathermap.org/img/wn/10d@2x.png"
-            else "http://openweathermap.org/img/wn/10n@2x.png"
-
-            67 -> if (is_day) "http://openweathermap.org/img/wn/10d@2x.png"
-            else "http://openweathermap.org/img/wn/10n@2x.png"
-
-            71 -> if (is_day) "http://openweathermap.org/img/wn/13d@2x.png"
-            else "http://openweathermap.org/img/wn/13n@2x.png"
-
-            73 -> if (is_day) "http://openweathermap.org/img/wn/13d@2x.png"
-            else "http://openweathermap.org/img/wn/13n@2x.png"
-
-            75 -> if (is_day) "http://openweathermap.org/img/wn/13d@2x.png"
-            else "http://openweathermap.org/img/wn/13n@2x.png"
-
-            77 -> if (is_day) "http://openweathermap.org/img/wn/13d@2x.png"
-            else "http://openweathermap.org/img/wn/13n@2x.png"
-
-            80 -> if (is_day) "http://openweathermap.org/img/wn/09d@2x.png"
-            else "http://openweathermap.org/img/wn/09n@2x.png"
-
-            81 -> if (is_day) "http://openweathermap.org/img/wn/09d@2x.png"
-            else "http://openweathermap.org/img/wn/09n@2x.png"
-
-            82 -> if (is_day) "http://openweathermap.org/img/wn/09d@2x.png"
-            else "http://openweathermap.org/img/wn/09n@2x.png"
-
-            85 -> if (is_day) "http://openweathermap.org/img/wn/13d@2x.png"
-            else "http://openweathermap.org/img/wn/13n@2x.png"
-
-            86 -> if (is_day) "http://openweathermap.org/img/wn/13d@2x.png"
-            else "http://openweathermap.org/img/wn/13n@2x.png"
-
-            95 -> if (is_day) "http://openweathermap.org/img/wn/11d@2x.png"
-            else "http://openweathermap.org/img/wn/11n@2x.png"
-
-            96 -> if (is_day) "http://openweathermap.org/img/wn/11d@2x.png"
-            else "http://openweathermap.org/img/wn/11n@2x.png"
-
-            99 -> if (is_day) "http://openweathermap.org/img/wn/11d@2x.png"
-            else "http://openweathermap.org/img/wn/11n@2x.png"
+            95 -> if (is_day) "thunderstorms-day" else "thunderstorms-night"
+            96 -> if (is_day) "thunderstorms-day-hail" else "thunderstorms-night-hail"
+            99 -> if (is_day) "thunderstorms-extreme-day-hail" else "thunderstorms-extreme-night-hail"
 
             else -> ""
-
         }
     }
     fun load_weather_days(obj : JSONObject)
@@ -730,7 +684,7 @@ class focus_main : AppCompatActivity() {
         var atemp_min = daily.getJSONArray("apparent_temperature_min");
         var rain_s = daily.getJSONArray("rain_sum");
 
-        var hash_v = Hashtable<Int, Bitmap>();
+        var hash_v = Hashtable<Int, Drawable>();
 
         for(i in 0 until time.length())
         {
@@ -753,7 +707,7 @@ class focus_main : AppCompatActivity() {
             var temp_max = atemp_max.getDouble(i);
             var rains = rain_s.getDouble(i);
             var is_day = true;
-            var bitmap : Bitmap? = null;
+            var bitmap : Drawable? = null;
 
             if(greg.get(Calendar.DAY_OF_WEEK)==(GregorianCalendar()).get(Calendar.DAY_OF_WEEK))
                 is_day = current.getInt("is_day") != 0;
@@ -763,19 +717,25 @@ class focus_main : AppCompatActivity() {
 
             if(bitmap == null)
             {
-                val url: String = weather_code_to_url(weather_code, is_day).substring(7);
+                val icon: String = weather_code_to_url(weather_code, is_day)
+                val url = "cdn.meteocons.com/3.0.0-next.10/svg-static/fill/${icon}.svg";
                 val aurl = URL(
-                    "http", url.split("/")[0], 80, url.split("/").stream().skip(1).collect(
+                    "https", url.split("/")[0], 443, url.split("/").stream().skip(1).collect(
                         Collectors.joining("/")
                     )
                 );
 
-                with(aurl.openConnection() as HttpURLConnection)
+                with(aurl.openConnection() as HttpsURLConnection)
                 {
                     setRequestProperty("User-Agent", "curl/7.81.0");
-                    var bm_img: Bitmap = BitmapFactory.decodeStream(getInputStream());
-                    bitmap = bm_img;
-                    hash_v[weather_code + (if (is_day) (256) else (0))] = bitmap;
+                    Log.println(Log.DEBUG, "tag", "svg: ${url}, ${responseMessage}");
+
+                    var svg = SVG.getFromInputStream(getInputStream());
+                    bitmap = PictureDrawable(svg.renderToPicture());
+                    //var bm_img: Bitmap = SVg.decodeStream(getInputStream());
+                    //bitmap = bm_img;
+                    //Log.println(Log.DEBUG, "tag", "dw: ${bitmap}");
+                    hash_v[weather_code + (if (is_day) (256) else (0))] = bitmap!!;
                 }
                 Log.println(Log.DEBUG, "tag","weather_code: ${weather_code}, url: ${url}");
             }
@@ -790,8 +750,8 @@ class focus_main : AppCompatActivity() {
         var th = thread(isDaemon = true) {
             var sb : StringBuilder = StringBuilder();
             try {
-                var url = URL("http", "ipinfo.io", 80, "");
-                with(url.openConnection() as HttpURLConnection)
+                var url = URL("https", "ipinfo.io", 443, "");
+                with(url.openConnection() as HttpsURLConnection)
                 {
                     setRequestProperty("User-Agent", "curl/7.81.0");
                     val reader = getInputStream().bufferedReader();
@@ -820,7 +780,7 @@ class focus_main : AppCompatActivity() {
 
                 url = URL("https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weather_code,apparent_temperature_max,apparent_temperature_min,rain_sum&current=is_day&timezone=auto&timeformat=unixtime&start_date=${sbeg}&end_date=${send}");
                 Log.println(Log.DEBUG, "tg", "url: ${url.toURI()}");
-                with(url.openConnection() as HttpURLConnection)
+                with(url.openConnection() as HttpsURLConnection)
                 {
                     setRequestProperty("User-Agent", "curl/7.81.0");
                     val reader = getInputStream().bufferedReader();
