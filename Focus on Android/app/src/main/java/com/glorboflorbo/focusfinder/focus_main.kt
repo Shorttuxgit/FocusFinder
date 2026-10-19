@@ -808,7 +808,17 @@ class focus_main : AppCompatActivity() {
 
                 sb.clear();
 
-                url = URL("https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weather_code,apparent_temperature_max,apparent_temperature_min,rain_sum&current=is_day&timezone=auto&timeformat=unixtime");
+                val gc : GregorianCalendar = GregorianCalendar();
+                gc.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY);
+
+                var sdfm : SimpleDateFormat = SimpleDateFormat("yyyy-MM-dd")
+                var sbeg = sdfm.format(gc.time);
+
+                gc.set(Calendar.DAY_OF_WEEK, Calendar.SUNDAY);
+                gc.add(Calendar.WEEK_OF_YEAR, 1);
+                var send = sdfm.format(gc.time);
+
+                url = URL("https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weather_code,apparent_temperature_max,apparent_temperature_min,rain_sum&current=is_day&timezone=auto&timeformat=unixtime&start_date=${sbeg}&end_date=${send}");
                 Log.println(Log.DEBUG, "tg", "url: ${url.toURI()}");
                 with(url.openConnection() as HttpURLConnection)
                 {
