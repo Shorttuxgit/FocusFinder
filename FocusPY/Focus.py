@@ -1,4 +1,5 @@
 #!/bin/python3
+import datetime
 import sys
 import subprocess
 import os
@@ -7,6 +8,19 @@ import json
 import threading
 import queue
 from datetime import datetime, date, timedelta
+
+current_Date = datetime.now()
+current_time = current_Date.strftime("%p")
+greeting = ""
+
+if current_time == "AM":
+    greeting = "Good Morning,"
+elif current_time == "PM":
+    greeting = "Good Afternoon,"
+
+    
+
+
 
 # --- OS DETECTION ---
 CURRENT_OS = platform.system()
@@ -579,7 +593,7 @@ class TimetableWidget:
 
         welcome_label = ctk.CTkLabel(
             welcome_card,
-            text=f"Welcome Back, {self.student_name}",
+            text=f"{greeting} {self.student_name}",
             font=("Arial", 18, "bold"),
             text_color=FG_ACCENT
         )
