@@ -41,10 +41,12 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
+    implementation(libs.play.services.location)
     ksp(libs.androidx.lifecycle.compiler)
     ksp(libs.androidx.room.compiler)
     implementation(libs.material)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
+    implementation(libs.androidsvg.aar)
 }

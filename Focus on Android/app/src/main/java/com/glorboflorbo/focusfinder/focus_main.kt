@@ -1,23 +1,31 @@
 package com.glorboflorbo.focusfinder
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.PictureDrawable
+import android.location.Location
+import android.location.LocationManager
 import android.os.Bundle
+import android.os.Looper
 import android.util.Log
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
-import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.AndroidViewModel
@@ -36,15 +44,26 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
+import com.caverock.androidsvg.SVG
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
 import com.google.gson.Gson
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.lang.Integer.min
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
 import java.util.GregorianCalendar
+import java.util.Hashtable
 import java.util.Locale
+import java.util.concurrent.Semaphore
+import java.util.concurrent.TimeUnit
+import java.util.stream.Collectors
+import javax.net.ssl.HttpsURLConnection
+import kotlin.concurrent.thread
 import kotlin.math.abs
 
 class timetable_event
@@ -127,7 +146,7 @@ class timetable_day
 
                 add_ev(timetable_event(time_start, time_end, title, room, staff));
             }
-            catch(e : IndexOutOfBoundsException)
+            catch(e : Exception)
             {
 
             }
@@ -316,6 +335,29 @@ abstract class gesture_swipe : View.OnTouchListener
     abstract fun onSwipeRight();
     abstract fun onDoubleClick();
 }
+class weather_day
+{
+    var min_temp : Double;
+    var max_temp : Double;
+    var wdraw : Drawable;
+    var rainp : Double;
+    var is_day : Boolean;
+    var today : Boolean;
+
+    constructor(mt : Double, mxt : Double, wb : Drawable, ranp : Double, is_dy : Boolean, t : Boolean)
+    {
+        min_temp = mt;
+        max_temp = mxt;
+        wdraw = wb;
+        rainp = ranp;
+        is_day = is_dy;
+        today = t;
+    }
+    fun is_raining() : Boolean
+    {
+        return (rainp > 0.01);
+    }
+}
 class focus_main : AppCompatActivity() {
     var date : GregorianCalendar = GregorianCalendar();
     var cookies : String? = null;
@@ -325,10 +367,13 @@ class focus_main : AppCompatActivity() {
     var sdfmt1 : SimpleDateFormat = SimpleDateFormat("EEEE, dd'st' MMMM yyyy");
     var json_sdf : SimpleDateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     var days = arrayOfNulls<timetable_day>(6);
+    var wdays = arrayOfNulls<weather_day>(7);
     var views = arrayOfNulls<timetable_view>(4);
     var lbody : String? = null;
+    var web_view : WebView? = null;
     var nulltimetable_day : timetable_day? = null;
     var cache_view : week_view? = null;
+    var fusedLocationClient: FusedLocationProviderClient? = null;
     fun update_texts()
     {
         var d = date.get(Calendar.DAY_OF_WEEK) - 2;
@@ -343,7 +388,36 @@ class focus_main : AppCompatActivity() {
             Log.println(Log.DEBUG, "dbg", "$i has ${views[i]} with day ${day}");
             views[i]?.set_info(day?.events[i]!!);
         }
-
+        update_weather_day();
+    }
+    fun update_weather_day()
+    {
+        var d = date.get(Calendar.DAY_OF_WEEK) - 2;
+        if(d < 0)
+            d = 6;
+        var weekd = wdays[d];
+        if(weekd == null)
+            return;
+        //if(weekd.is_raining() || !weekd.is_day)
+        //    AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
+        //else
+        //    AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
+        var weahter = findViewById<TextView>(R.id.weahter);
+        var sst : String = "";
+        if(weekd.today) {
+            if (weekd.is_raining())
+                sst += "Rain, ";
+            if (weekd.is_day)
+                sst += "Day";
+            else
+                sst += "Night";
+        }
+        else if (weekd.is_raining())
+            sst += "Rain";
+        sst += " (${weekd.min_temp}°C - ${weekd.max_temp}°C)"
+        weahter.text = sst;
+        var iview = findViewById<ImageView>(R.id.imageView);
+        iview.setImageDrawable(weekd.wdraw);
     }
     @SuppressLint("ClickableViewAccessibility")
     fun update_timetable(events: JSONArray)
@@ -379,10 +453,10 @@ class focus_main : AppCompatActivity() {
 
                 day = dt_start.get(Calendar.DAY_OF_WEEK) - 2;
                 if(day < 0)
-                    throw Error();
+                    throw Exception();
 
             }
-            catch(e : Error)
+            catch(e : Exception)
             {
                 continue;
             }
@@ -553,13 +627,228 @@ class focus_main : AppCompatActivity() {
             update_texts();
         }
     }
-    fun load_timetable()
+    fun weather_code_to_url(weather_code : Int, is_day : Boolean) : String
     {
-        if(lbody == null)
-            return;
+        return when (weather_code) {
 
-        runOnUiThread{
+            0 -> if (is_day) "clear-day" else "clear-night"
+            1 -> if (is_day) "clear-day" else "clear-night"
 
+            2 -> if (is_day) "partly-cloudy-day" else "partly-cloudy-night"
+
+            3 -> if (is_day) "cloudy" else "cloudy"
+
+            45 -> if (is_day) "fog-day" else "fog-night"
+            48 -> if (is_day) "haze-day" else "haze-night"
+
+            51 -> if (is_day) "partly-cloudy-day-drizzle" else "partly-cloudy-night-drizzle"
+            53 -> if (is_day) "drizzle" else "drizzle"
+            55 -> if (is_day) "extreme-day-drizzle" else "extreme-night-drizzle"
+            56 -> if (is_day) "overcast-drizzle" else "overcast-drizzle"
+            57 -> if (is_day) "extreme-drizzle" else "extreme-drizzle"
+
+            61 -> if (is_day) "partly-cloudy-day-rain" else "partly-cloudy-night-rain"
+            63 -> if (is_day) "rain" else "rain"
+            65 -> if (is_day) "extreme-day-rain" else "extreme-night-rain"
+            66 -> if (is_day) "overcast-rain" else "overcast-rain"
+            67 -> if (is_day) "extreme-rain" else "extreme-rain"
+
+            71 -> if (is_day) "partly-cloudy-day-snow" else "partly-cloudy-night-snow"
+            73 -> if (is_day) "snow" else "snow"
+            75 -> if (is_day) "extreme-day-snow" else "extreme-night-snow"
+            77 -> if (is_day) "extreme-snow" else "extreme-snow"
+
+            80 -> if (is_day) "mostly-clear-day-rain" else "mostly-clear-night-rain"
+            81 -> if (is_day) "mostly-clear-day-rain" else "mostly-clear-night-rain"
+            82 -> if (is_day) "extreme-day-rain" else "extreme-night-rain"
+
+            85 -> if (is_day) "mostly-clear-day-snow" else "mostly-clear-night-snow"
+            86 -> if (is_day) "mostly-clear-day-snow" else "mostly-clear-night-snow"
+
+            95 -> if (is_day) "thunderstorms-day" else "thunderstorms-night"
+            96 -> if (is_day) "thunderstorms-day-hail" else "thunderstorms-night-hail"
+            99 -> if (is_day) "thunderstorms-extreme-day-hail" else "thunderstorms-extreme-night-hail"
+
+            else -> ""
+        }
+    }
+    fun load_weather_days(obj : JSONObject)
+    {
+        var daily = obj.getJSONObject("daily");
+        var current = obj.getJSONObject("current");
+        var time = daily.getJSONArray("time");
+        var wcode = daily.getJSONArray("weather_code");
+        var atemp_max = daily.getJSONArray("apparent_temperature_max");
+        var atemp_min = daily.getJSONArray("apparent_temperature_min");
+        var rain_s = daily.getJSONArray("rain_sum");
+
+        var hash_v = Hashtable<Int, Drawable>();
+
+        for(i in 0 until time.length())
+        {
+            var tm = time.getLong(i);
+            var day = Date(tm*1000);
+            var greg = GregorianCalendar();
+            greg.time = day;
+            val day_idx : Int = when(greg.get(Calendar.DAY_OF_WEEK))
+            {
+                Calendar.SUNDAY -> 6;
+                else -> {
+                    greg.get((Calendar.DAY_OF_WEEK))-2;
+                }
+            }
+
+            Log.println(Log.DEBUG, "tg", "day_idx: ${day_idx}, ${greg.get(Calendar.DAY_OF_WEEK)}, ${tm}, ${day.day}");
+
+            var weather_code = wcode.getInt(i);
+            var temp_min = atemp_min.getDouble(i);
+            var temp_max = atemp_max.getDouble(i);
+            var rains = rain_s.getDouble(i);
+            var is_day = true;
+            var bitmap : Drawable? = null;
+
+            if(greg.get(Calendar.DAY_OF_WEEK)==(GregorianCalendar()).get(Calendar.DAY_OF_WEEK))
+                is_day = current.getInt("is_day") != 0;
+
+            if(hash_v[weather_code + (if (is_day) (256) else (0))] != null)
+                bitmap = hash_v[weather_code + (if (is_day) (256) else (0))]!!;
+
+            if(bitmap == null)
+            {
+                val icon: String = weather_code_to_url(weather_code, is_day)
+                val url = "cdn.meteocons.com/3.0.0-next.10/svg-static/fill/${icon}.svg";
+                val aurl = URL(
+                    "https", url.split("/")[0], 443, url.split("/").stream().skip(1).collect(
+                        Collectors.joining("/")
+                    )
+                );
+
+                with(aurl.openConnection() as HttpsURLConnection)
+                {
+                    setRequestProperty("User-Agent", "curl/7.81.0");
+                    Log.println(Log.DEBUG, "tag", "svg: ${url}, ${responseMessage}");
+
+                    var svg = SVG.getFromInputStream(getInputStream());
+                    bitmap = PictureDrawable(svg.renderToPicture());
+                    //var bm_img: Bitmap = SVg.decodeStream(getInputStream());
+                    //bitmap = bm_img;
+                    //Log.println(Log.DEBUG, "tag", "dw: ${bitmap}");
+                    hash_v[weather_code + (if (is_day) (256) else (0))] = bitmap!!;
+                }
+                Log.println(Log.DEBUG, "tag","weather_code: ${weather_code}, url: ${url}");
+            }
+
+            wdays[day_idx] = weather_day(temp_min, temp_max, bitmap!!, rains, is_day,greg.get(Calendar.DAY_OF_WEEK)==(GregorianCalendar()).get(Calendar.DAY_OF_WEEK));
+        }
+
+    }
+    data class fuck_you_kotlin(var d : Double);
+    fun get_long_lat_ip(long : fuck_you_kotlin, lat : fuck_you_kotlin)
+    {
+        Log.println(Log.DEBUG, "tg", "USING LONG_LAT_IP");
+        var sb : StringBuilder = StringBuilder();
+        var url = URL("https", "ipinfo.io", 443, "");
+        with(url.openConnection() as HttpsURLConnection)
+        {
+            setRequestProperty("User-Agent", "curl/7.81.0");
+            val reader = getInputStream().bufferedReader();
+            var line: String = reader.readText();
+            sb.append(line);
+        }
+        var str_res = sb.toString();
+        var json = JSONObject(str_res);
+
+        val loc = json.getString("loc");
+        val loc_s = loc.split(",");
+        val longitude = loc_s[1].toDouble();
+        val latitude = loc_s[0].toDouble();
+
+        long.d = longitude;
+        lat.d = latitude;
+    }
+    fun get_long_lat_net(long : fuck_you_kotlin, lat : fuck_you_kotlin) : Boolean
+    {
+        if(checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+        {
+            requestPermissions(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION), 0);
+            if(checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+                return false;
+        }
+        val lm : LocationManager = getSystemService(LOCATION_SERVICE) as LocationManager;
+        var location: Location? = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+        if(location == null) {
+            val s = Semaphore(0);
+            fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+            fusedLocationClient!!.lastLocation.addOnSuccessListener { loc ->
+                location = loc;
+                s.release();
+            };
+            s.tryAcquire(1000, TimeUnit.MILLISECONDS);
+            if(location == null)
+                return false;
+        }
+        long.d = location.longitude;
+        lat.d = location.latitude;
+        return true;
+    }
+    fun load_weather(cont : () -> Unit)
+    {
+        // haha fuck your location settings
+        var th = thread(isDaemon = true) {
+            var sb : StringBuilder = StringBuilder();
+            try {
+                Looper.prepare();
+                var url : URL;
+                var str_res : String;
+                var json : JSONObject;
+                var latd : fuck_you_kotlin = fuck_you_kotlin(0.0);
+                var longd : fuck_you_kotlin = fuck_you_kotlin(0.0);
+                var latitude : Double;
+                var longitude : Double;
+                if(!get_long_lat_net(longd, latd))
+                    get_long_lat_ip(longd, latd);
+                latitude = latd.d;
+                longitude = longd.d;
+
+                val gc : GregorianCalendar = GregorianCalendar();
+                gc.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY);
+
+                var sdfm : SimpleDateFormat = SimpleDateFormat("yyyy-MM-dd")
+                var sbeg = sdfm.format(gc.time);
+
+                gc.set(Calendar.DAY_OF_WEEK, Calendar.SUNDAY);
+                gc.add(Calendar.WEEK_OF_YEAR, 1);
+                var send = sdfm.format(gc.time);
+
+                url = URL("https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weather_code,apparent_temperature_max,apparent_temperature_min,rain_sum&current=is_day&timezone=auto&timeformat=unixtime&start_date=${sbeg}&end_date=${send}");
+                Log.println(Log.DEBUG, "tg", "url: ${url.toURI()}");
+                with(url.openConnection() as HttpsURLConnection)
+                {
+                    setRequestProperty("User-Agent", "curl/7.81.0");
+                    val reader = getInputStream().bufferedReader();
+                    var line: String = reader.readText();
+                    sb.append(line);
+                }
+
+                str_res = sb.toString();
+
+                json = JSONObject(str_res);
+
+                load_weather_days(json);
+
+
+                //Log.println(Log.DEBUG, "tag", "weather data: ${str_res}");
+            }
+            catch(e : Exception)
+            {
+                Log.println(Log.DEBUG, "except", "${e.printStackTrace()}");
+            }
+            cont();
+        }
+    }
+    fun continue_timetable()
+    {
+        runOnUiThread {
             try {
                 var json_obj = JSONObject(lbody!!);
                 var jlist_1 = json_obj.getJSONArray("components");
@@ -577,9 +866,33 @@ class focus_main : AppCompatActivity() {
                         }
                     }
                 }
-            } catch (e: Error) {
+            } catch (e: Exception) {
                 Log.println(Log.DEBUG, "dbge", e.toString());
             }
+        }
+    }
+    fun load_timetable()
+    {
+        if(lbody == null)
+            return;
+
+        runOnUiThread{
+
+            web_view!!.webViewClient = WebViewClient();
+            val d = findViewById<ConstraintLayout>(R.id.main)
+            d.removeView(web_view!!);
+            web_view!!.clearHistory();
+            web_view!!.clearCache(true);
+            web_view!!.loadUrl("about:blank");
+            web_view!!.onPause();
+            web_view!!.removeAllViews();
+            web_view!!.destroyDrawingCache();
+            web_view!!.pauseTimers();
+            web_view!!.destroy();
+
+            init_login();
+
+            load_weather(::continue_timetable);
         }
     }
     fun init_login()
@@ -612,6 +925,8 @@ class focus_main : AppCompatActivity() {
     fun finish_login()
     {
         init_login();
+
+        /*
 
         var webview = findViewById<WebView>(R.id.web2);
 
@@ -659,25 +974,57 @@ class focus_main : AppCompatActivity() {
             }
         }
         CookieManager.getInstance().setCookie(url_target, cookies);
-        webview.loadUrl(url_target);
+        webview.loadUrl(url_target);*/
 
     }
     fun load_webview()
     {
-        var webview = findViewById<WebView>(R.id.web);
-        webview.alpha = 1.0f;
+        setContentView(R.layout.activity_focus_get)
+        web_view = findViewById<WebView>(R.id.web);
+        web_view!!.alpha = 1.0f;
 
-        webview.settings.javaScriptEnabled = true;
-        webview.settings.domStorageEnabled = true;
+        web_view!!.settings.javaScriptEnabled = true;
+        web_view!!.settings.domStorageEnabled = true;
 
         var url_target = "https://focus.barton.ac.uk";
 
-        webview.webViewClient = object : WebViewClient()
+        web_view!!.addJavascriptInterface(focus_inject(this), "AndroidFocusInjection");
+
+        web_view!!.webViewClient = object : WebViewClient()
         {
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                if(url == null)
+                    return;
+                if(!url.contains("timetable"))
+                    return;
+
+                Log.println(Log.DEBUG, "dbg2", "Got ON PAGE STARTED");
+                view?.evaluateJavascript("(function() {const original_fetch = window.fetch; window.fetch = async (...args) => {const [url, options] = args; const response = await original_fetch(...args); if(options && options.method && options.method == 'POST') { try {const c = response.clone(); const url = c.url; const body = await c.text(); AndroidFocusInjection.handle_post(url, body); } catch (e) {} } return response; }; } )();", null);
+            }
             override fun onPageFinished(view : WebView?, url : String?)
             {
                 super.onPageFinished(view, url);
-                if(url != "https://focus.barton.ac.uk/login")
+                if(url == null)
+                    return;
+                if(!url.contains("home") || !url.contains("focus"))
+                    return;
+
+
+                var url_got = url;
+                Log.println(Log.DEBUG, "dbg", url_got);
+                var idx = url.indexOfLast {
+                    it == '/'
+                }
+                if(idx < 0)
+                    return;
+
+                var url_timetable = url.subSequence(0, idx+1).toString() + "timetable";
+                Log.println(Log.DEBUG, "dbg", url_timetable);
+
+                view?.loadUrl(url_timetable);
+
+                /*if(url != "https://focus.barton.ac.uk/login")
                 {
                     var cookies_ = CookieManager.getInstance().getCookie(url);
                     if(cookies_ != null && cookies_.contains("session"))
@@ -687,35 +1034,16 @@ class focus_main : AppCompatActivity() {
                         Log.println(Log.DEBUG, "dbg", "page finished $url");
                         finish_login();
                     }
-                }
+                }*/
             }
         }
-        webview.loadUrl(url_target);
+        web_view!!.loadUrl(url_target);
     }
     @SuppressLint("ClickableViewAccessibility")
-    fun load_cache(week: week_cached?) : Boolean
+    fun continue_cache()
     {
-        if(week == null) {
-            load_webview();
-            return false;
-        }
-        init_login();
-
-        for(i in 0 until 6)
-        {
-            days[i] = timetable_day(i);
-        }
-        val len = min(week.week_days.day_list.size, 6);
-        for(i in 0 until len)
-        {
-            val week = week.week_days.day_list[i];
-
-            Log.println(Log.DEBUG, "dbgp", "${week.week_day_data}")
-
-            days[week.week_day]?.interpret(week.week_day_data);
-        }
-
         runOnUiThread {
+            update_weather_day();
             var tview = findViewById<TextView>(R.id.view7);
             var button2 = findViewById<Button>(R.id.button2);
             var button1 = findViewById<Button>(R.id.button);
@@ -844,6 +1172,30 @@ class focus_main : AppCompatActivity() {
             update_texts();
 
         }
+    }
+    fun load_cache(week: week_cached?) : Boolean
+    {
+        if(week == null) {
+            load_webview();
+            return false;
+        }
+        init_login();
+
+        for(i in 0 until 6)
+        {
+            days[i] = timetable_day(i);
+        }
+        val len = min(week.week_days.day_list.size, 6);
+        for(i in 0 until len)
+        {
+            val week = week.week_days.day_list[i];
+
+            Log.println(Log.DEBUG, "dbgp", "${week.week_day_data}")
+
+            days[week.week_day]?.interpret(week.week_day_data);
+        }
+
+        load_weather(::continue_cache);
         return true;
     }
     fun do_login()
@@ -870,7 +1222,7 @@ class focus_main : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         cache_view = ViewModelProvider(this)[week_view::class.java];
         enableEdgeToEdge()
-        setContentView(R.layout.activity_focus_get)
+        setContentView(R.layout.activity_focus_main)
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
