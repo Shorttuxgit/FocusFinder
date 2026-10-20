@@ -8,6 +8,9 @@ import json
 import threading
 import queue
 from datetime import datetime, date, timedelta
+from PIL import Image, ImageTk
+
+#Cython
 
 current_Date = datetime.now()
 current_time = current_Date.strftime("%p")
@@ -607,6 +610,7 @@ class TimetableWidget:
         )
         nav_card.pack(fill=tk.X, pady=(0, 15), ipadx=12, ipady=10)
 
+
         self.prev_btn = ctk.CTkButton(
             nav_card,
             text="<< Previous Day",
@@ -675,6 +679,23 @@ class TimetableWidget:
         # --- BOTTOM ACTION BAR ---
         bottom_frame = ctk.CTkFrame(self.main_container, fg_color=BG_DARK)
         bottom_frame.pack(fill=tk.X)
+
+        smallset = None
+        if os.path.exists("settings.png"):
+            settimage = Image.open("settings.png")
+            smallset = ctk.CTkImage(light_image=settimage, dark_image=settimage, size=(16, 16))
+
+        sett_btn = ctk.CTkButton(
+            bottom_frame,
+            text="Settings",
+            font=("Arial", 12, "bold"),
+            fg_color=FG_ACCENT,
+            image=smallset,
+            hover_color="#b4befe",
+            text_color=BG_DARK
+        )
+
+        sett_btn.pack(side=tk.BOTTOM, anchor="e")
 
         today_btn = ctk.CTkButton(
             bottom_frame,
