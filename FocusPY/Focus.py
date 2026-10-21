@@ -8,6 +8,7 @@ import json
 import threading
 import queue
 from datetime import datetime, date, timedelta
+
 #Cython
 
 current_Date = datetime.now()
@@ -125,6 +126,18 @@ def extract_events(livewire_responses):
                     evt_list = dispatch.get("params", {}).get("events", [])
                     events.extend(evt_list)
     return events
+
+class Settings(ctk.CTkToplevel):
+     def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.geometry("400x300")
+
+        self.label = customtkinter.CTkLabel(self, text="ToplevelWindow")
+        self.label.pack(padx=20, pady=20)
+
+
+
+
 
 
 class FocusFinderApp:
@@ -697,6 +710,7 @@ class TimetableWidget:
         bottom_frame.pack(fill=tk.X)
 
 
+        
 
 
 
@@ -819,8 +833,11 @@ class TimetableWidget:
         else:
             messagebox.showinfo("Info", "Time to Relax! No Lessons Today!!")
 
+
     def open_settings(self):
+        
         messagebox.showinfo("Settings", "Settings functionality is not implemented yet.")
+        
 
 
 if __name__ == "__main__":

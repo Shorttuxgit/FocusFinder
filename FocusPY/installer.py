@@ -61,7 +61,7 @@ def setup_linux(install_dir):
     desktop_entry = f"""[Desktop Entry]
 Type=Application
 Name={APP_NAME}
-Exec=python3 "{target_script}"
+Exec=GDK_BACKEND=X11 python3 "{target_script}"
 Icon={icon_path if os.path.exists(icon_path) else ""}
 StartupWMClass=focusfinder
 Terminal=false
