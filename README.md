@@ -27,6 +27,8 @@ Work has begun on making the IOS app, but as an unverified developer it requires
 
 Thus, using the IOS app for everyday users is not recommended. If you really want this app, then we recommend you purchase and android phone and join the superiors!!
 
+It is mostly written in Swift
+
 
 
 ## FocusKDE
