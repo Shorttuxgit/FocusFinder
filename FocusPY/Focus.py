@@ -62,6 +62,9 @@ FG_ACCENT = "#89b4fa"
 FG_GREEN = "#a6e3a1"
 
 
+
+
+
 def apply_app_icon(root):
     """Loads icon.png onto the window if available."""
     if os.path.exists(ICON_FILE):
@@ -821,6 +824,9 @@ class TimetableWidget:
 
 
 if __name__ == "__main__":
-    root = ctk.CTk()
+    root = ctk.CTk(className='focusfinder')
     app = FocusFinderApp(root)
+    root.wm_attributes('-type', 'dialog')
     root.mainloop()
+
+

@@ -63,6 +63,7 @@ Type=Application
 Name={APP_NAME}
 Exec=python3 "{target_script}"
 Icon={icon_path if os.path.exists(icon_path) else ""}
+StartupWMClass=focusfinder
 Terminal=false
 Categories=Education;Utility;
 """
