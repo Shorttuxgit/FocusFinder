@@ -8,8 +8,6 @@ import json
 import threading
 import queue
 from datetime import datetime, date, timedelta
-from PIL import Image, ImageTk
-
 #Cython
 
 current_Date = datetime.now()
@@ -600,7 +598,22 @@ class TimetableWidget:
             font=("Arial", 18, "bold"),
             text_color=FG_ACCENT
         )
-        welcome_label.pack(anchor="w", padx=12, pady=6)
+        welcome_label.pack(side=tk.LEFT, padx=12, pady=6)
+
+
+        sett_btn = ctk.CTkButton(
+            welcome_card,
+            text="Settings",
+            font=("Arial", 12, "bold"),
+            fg_color=BG_HOVER,
+            hover_color="#585b70",
+            text_color=FG_TEXT,
+            command=self.open_settings,
+            corner_radius=12,
+            height=36,
+            width=90
+        )
+        sett_btn.pack(side=tk.RIGHT, padx=10)
 
         # --- TOP NAVIGATION BAR (Rounded Card) ---
         nav_card = ctk.CTkFrame(
@@ -680,22 +693,11 @@ class TimetableWidget:
         bottom_frame = ctk.CTkFrame(self.main_container, fg_color=BG_DARK)
         bottom_frame.pack(fill=tk.X)
 
-        smallset = None
-        if os.path.exists("settings.png"):
-            settimage = Image.open("settings.png")
-            smallset = ctk.CTkImage(light_image=settimage, dark_image=settimage, size=(16, 16))
 
-        sett_btn = ctk.CTkButton(
-            bottom_frame,
-            text="Settings",
-            font=("Arial", 12, "bold"),
-            fg_color=FG_ACCENT,
-            image=smallset,
-            hover_color="#b4befe",
-            text_color=BG_DARK
-        )
 
-        sett_btn.pack(side=tk.BOTTOM, anchor="e")
+
+
+        sett_btn.pack(side=tk.RIGHT)
 
         today_btn = ctk.CTkButton(
             bottom_frame,
@@ -813,6 +815,9 @@ class TimetableWidget:
             self.update_display()
         else:
             messagebox.showinfo("Info", "Time to Relax! No Lessons Today!!")
+
+    def open_settings(self):
+        messagebox.showinfo("Settings", "Settings functionality is not implemented yet.")
 
 
 if __name__ == "__main__":
