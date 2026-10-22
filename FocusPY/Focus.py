@@ -19,7 +19,7 @@ time_format = True # False for 24 hour True for 12 hour
 
 if time_format == True:
     formats = "%I"
-    isPOM = "%P"
+    isPOM = "%p"
     isPOMenable = "Enabled" 
 
 else:
