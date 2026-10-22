@@ -19,11 +19,14 @@ time_format = True # False for 24 hour True for 12 hour
 
 if time_format == True:
     formats = "%I"
-    isPOM = "%P" 
+    isPOM = "%P"
+    isPOMenable = "Enabled" 
 
 else:
     formats = "%H"
     isPOM = ""
+    isPOMenable = "Disabled" 
+
 
 #Cython
 
@@ -848,6 +851,15 @@ class TimetableWidget:
         settingwin.geometry("400x400")
 
 
+    def POM_event():
+        global time_format
+        print("was pressed")
+
+        if time_format:
+            time_format = False
+        else:
+            time_format = True
+
 
 
     def open_settings(self):
@@ -856,8 +868,9 @@ class TimetableWidget:
             settingwin = ctk.CTkToplevel(root)
             settingwin.geometry("400x400")
             settingwin.title("Settings")
-            trybutton = ctk.CTkButton(settingwin, text="Try ME!", hover_color="#585b70")
-            trybutton.cget()
+            trybutton = ctk.CTkButton(settingwin, text=isPOMenable, hover_color="#585b70", command=self.POM_event)
+            
+            trybutton.pack(pady=20)
 
             inputbox = ctk.CTkEntry(settingwin, placeholder_text="Enter here")
 
@@ -869,14 +882,12 @@ class TimetableWidget:
         
 
 
-
         
 
 
 if __name__ == "__main__":
     root = ctk.CTk(className='focusfinder')
     app = FocusFinderApp(root)
-    root.wm_attributes('-type', 'dialog')
     root.mainloop()
 
 
