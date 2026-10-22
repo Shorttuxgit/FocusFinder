@@ -588,7 +588,7 @@ class TimetableWidget:
             fieldbackground=BG_SURFACE,
             bordercolor=BG_DARK,
             rowheight=34,
-            font=("Arial", 10)
+            font=("Arial", 13)
         )
         style.map(
             "Treeview",
@@ -715,7 +715,7 @@ class TimetableWidget:
         self.tree.heading("Room", text="Room")
         self.tree.heading("Staff", text="Staff")
 
-        self.tree.column("Time", width=120, anchor=tk.W)
+        self.tree.column("Time", width=180, anchor=tk.W)
         self.tree.column("Event Title", width=260, anchor=tk.W)
         self.tree.column("Room", width=80, anchor=tk.W)
         self.tree.column("Staff", width=140, anchor=tk.W)
