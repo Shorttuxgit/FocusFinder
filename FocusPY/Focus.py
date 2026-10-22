@@ -9,6 +9,13 @@ import threading
 import queue
 from datetime import datetime, date, timedelta
 
+sett_enabled = False
+weather_enabled = False
+autoupdate = False
+version_number = 0
+profile_enabled = False
+
+
 #Cython
 
 current_Date = datetime.now()
@@ -126,15 +133,6 @@ def extract_events(livewire_responses):
                     evt_list = dispatch.get("params", {}).get("events", [])
                     events.extend(evt_list)
     return events
-
-class Settings(ctk.CTkToplevel):
-     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.geometry("400x300")
-
-        self.label = customtkinter.CTkLabel(self, text="ToplevelWindow")
-        self.label.pack(padx=20, pady=20)
-
 
 
 
@@ -675,6 +673,8 @@ class TimetableWidget:
             width=140
         )
         self.next_btn.pack(side=tk.RIGHT, padx=(0, 10))
+        sett_btn.pack(side=tk.RIGHT)
+
 
         # --- TABLE CONTAINER (Rounded Outer Box) ---
         table_card = ctk.CTkFrame(
@@ -714,7 +714,6 @@ class TimetableWidget:
 
 
 
-        sett_btn.pack(side=tk.RIGHT)
 
         today_btn = ctk.CTkButton(
             bottom_frame,
@@ -834,9 +833,31 @@ class TimetableWidget:
             messagebox.showinfo("Info", "Time to Relax! No Lessons Today!!")
 
 
+
+    def settings():
+        settingwin = ctk.CTkToplevel(root)
+        settingwin.geometry("400x400")
+
+
+
+
     def open_settings(self):
         
-        messagebox.showinfo("Settings", "Settings functionality is not implemented yet.")
+        if sett_enabled == True:
+            settingwin = ctk.CTkToplevel(root)
+            settingwin.geometry("400x400")
+            settingwin.title("Settings")
+            trybutton = ctk.CTkButton(settingwin, text="Try ME!", hover_color="#585b70")
+            inputbox = ctk.CTkEntry(settingwin, placeholder_text="Enter here")
+            
+            trybutton.pack(pady=40)
+        else:
+            messagebox.showinfo("Settings", f"Settings functionality is currently disabled. {sett_enabled}")
+
+        
+
+
+
         
 
 
