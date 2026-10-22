@@ -721,12 +721,6 @@ class TimetableWidget:
         bottom_frame = ctk.CTkFrame(self.main_container, fg_color=BG_DARK)
         bottom_frame.pack(fill=tk.X)
 
-
-        
-
-
-
-
         today_btn = ctk.CTkButton(
             bottom_frame,
             text="Jump to Today",
@@ -876,7 +870,7 @@ class TimetableWidget:
             
             self.trybutton = ctk.CTkButton(
                 settingwin, 
-                text=f"Time Format: 12H (POM)" if time_format else "Time Format: 24H", 
+                text=f"Time Format: 12H" if time_format else "Time Format: 24H", 
                 hover_color="#585b70", 
                 command=self.toggle_time
             )
