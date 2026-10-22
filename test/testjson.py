@@ -28,6 +28,7 @@ list = {
     "is_true": f"{bob}"
 }
 
+
 print(list["name"])
 
 a = json.dumps(list)
