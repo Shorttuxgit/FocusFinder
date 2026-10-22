@@ -9,7 +9,13 @@ import threading
 import queue
 from datetime import datetime, date, timedelta
 
-sett_enabled = False
+
+try:
+    config = open("config.txt", "x")
+except FileExistsError:
+    pass
+
+sett_enabled = True
 weather_enabled = False
 autoupdate = False
 version_number = 0
@@ -885,8 +891,6 @@ class TimetableWidget:
             )
             self.trybutton.pack(pady=20)
 
-            inputbox = ctk.CTkEntry(settingwin, placeholder_text="Enter here")
-            inputbox.pack(pady=20)
         else:
             messagebox.showinfo("Settings", f"Settings functionality is currently disabled. {sett_enabled}")
 
@@ -899,12 +903,14 @@ class TimetableWidget:
             formats = "%I"
             isPOM = "%p"
             isPOMenable = "Enabled"
-            self.trybutton.configure(text="Time Format: 12H ")
+            self.trybutton.configure(text="Time Format: 12H")
+
         else: 
             formats = "%H" 
             isPOM = ""
             isPOMenable = "Disabled"
             self.trybutton.configure(text="Time Format: 24H")
+        print(time_format)
 
         
 
