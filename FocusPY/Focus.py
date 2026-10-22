@@ -9,9 +9,10 @@ import threading
 import queue
 from datetime import datetime, date, timedelta
 
-
+config_dir = os.path.expanduser("~/.local/share/focusfinder/config.json")
 try:
-    config = open("config.txt", "x")
+
+    config = open(config_dir, "x")
 except FileExistsError:
     pass
 
