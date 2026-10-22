@@ -9,7 +9,7 @@ import threading
 import queue
 from datetime import datetime, date, timedelta
 
-sett_enabled = False
+
 weather_enabled = False
 autoupdate = False
 version_number = 0
@@ -851,18 +851,20 @@ class TimetableWidget:
         settingwin.geometry("400x400")
 
 
-    def POM_event():
+    def POM_event(self):
         global time_format
-        print("was pressed")
 
         if time_format:
             time_format = False
+            self.isPOMenable = "Enabled"
         else:
             time_format = True
+            self.isPOMenable = "Disabled"
 
 
 
     def open_settings(self):
+
         
         if sett_enabled == True:
             settingwin = ctk.CTkToplevel(root)
