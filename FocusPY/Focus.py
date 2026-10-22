@@ -68,7 +68,10 @@ ctk.set_default_color_theme("blue")
 
 SESSION_FILE = "session.json"
 CACHE_FILE = "timetable_cache.json"
-ICON_FILE = "icon.png"
+if platform.system() == "Windows":
+    ICON_FILE = "icon.ico"
+else:
+    ICON_FILE = "icon.png"
 BASE_URL = "https://focus.barton.ac.uk"
 
 # --- COLOR PALETTE ---
@@ -86,14 +89,20 @@ FG_GREEN = "#a6e3a1"
 
 
 def apply_app_icon(root):
-    """Loads icon.png onto the window if available."""
-    if os.path.exists(ICON_FILE):
-        try:
-            app_icon = tk.PhotoImage(file=ICON_FILE)
-            root.iconphoto(True, app_icon)
-        except Exception:
-            pass
-
+    """Sets the application icon on the window and taskbar."""
+    if CURRENT_OS == "Windows":
+        if os.path.exists(ICON_FILE):  # icon.ico
+            try:
+                root.iconbitmap(ICON_FILE)
+            except Exception:
+                pass
+    else:
+        if os.path.exists(ICON_FILE):  # icon.png
+            try:
+                app_icon = tk.PhotoImage(file=ICON_FILE)
+                root.iconphoto(True, app_icon)
+            except Exception:
+                pass   
 
 def get_current_week_sunday():
     """Calculates the date of the Sunday commencing the current week."""

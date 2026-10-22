@@ -8,6 +8,7 @@ import shutil
 CURRENT_OS = platform.system()
 APP_NAME = "FocusFinder"
 
+
 def get_install_dir():
     """Returns the correct installation directory based on the OS."""
     if CURRENT_OS == "Windows":
@@ -18,32 +19,58 @@ def get_install_dir():
     return None
 
 
+def find_pythonw():
+    """Locates pythonw.exe on the system."""
+    path = shutil.which("pythonw")
+    if path:
+        return path
+    candidates = [
+        os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Python"),
+        os.path.join(os.environ.get("LOCALAPPDATA", ""), "Python", "bin"),
+        os.path.join(os.environ.get("PROGRAMFILES", ""), "Python"),
+        os.path.join(os.environ.get("PROGRAMFILES(X86)", ""), "Python"),
+    ]
+    for base in candidates:
+        if not os.path.isdir(base):
+            continue
+        for entry in os.listdir(base):
+            candidate = os.path.join(base, entry, "pythonw.exe")
+            if os.path.isfile(candidate):
+                return candidate
+        direct = os.path.join(base, "pythonw.exe")
+        if os.path.isfile(direct):
+            return direct
+    return None
+
+
 def setup_windows(install_dir):
     """Handles installation, script placement, and Start Menu shortcut on Windows."""
     print("[*] Configuring Windows integration...")
-    
+
     target_script = os.path.join(install_dir, "Focus.py")
     icon_path = os.path.join(install_dir, "icon.ico")
 
-    # Create a batch launcher runner script if it doesn't exist
-    bat_path = os.path.join(install_dir, "run_focus.bat")
-    if not os.path.exists(bat_path):
-        with open(bat_path, "w") as f:
-            f.write(f'@echo off\npython "{target_script}"\npause\n')
+    pythonw = find_pythonw()
+    if not pythonw:
+        print("[!] Could not find pythonw.exe. Shortcut will use 'python' instead.")
+        pythonw = shutil.which("python") or "python"
 
-    # Create Windows Start Menu Shortcut using PowerShell
     start_menu = os.path.join(os.environ.get("APPDATA", ""), "Microsoft\\Windows\\Start Menu\\Programs")
     shortcut_path = os.path.join(start_menu, f"{APP_NAME}.lnk")
 
     ps_command = f"""
     $WshShell = New-Object -comObject WScript.Shell
     $Shortcut = $WshShell.CreateShortcut("{shortcut_path}")
-    $Shortcut.TargetPath = "{bat_path}"
+    $Shortcut.TargetPath = "{pythonw}"
+    $Shortcut.Arguments = "{target_script}"
     $Shortcut.WorkingDirectory = "{install_dir}"
     $Shortcut.IconLocation = "{icon_path}"
+    $Shortcut.WindowStyle = 7
     $Shortcut.Save()
     """
     subprocess.run(["powershell", "-Command", ps_command], capture_output=True)
+    print(f"    + Shortcut created: {shortcut_path}")
+    print(f"    + Using interpreter: {pythonw}")
 
 
 def setup_linux(install_dir):
@@ -53,7 +80,6 @@ def setup_linux(install_dir):
     target_script = os.path.join(install_dir, "Focus.py")
     icon_path = os.path.join(install_dir, "icon.png")
 
-    # Create Applications desktop entry
     applications_dir = os.path.expanduser("~/.local/share/applications")
     os.makedirs(applications_dir, exist_ok=True)
     desktop_file_path = os.path.join(applications_dir, f"{APP_NAME.lower()}.desktop")
@@ -87,7 +113,7 @@ def install_dependencies():
 
 if __name__ == "__main__":
     print(f"--- {APP_NAME} Installer & Updater ({CURRENT_OS}) ---")
-    
+
     install_dir = get_install_dir()
     if not install_dir:
         print(f"[!] Unsupported operating system: {CURRENT_OS}")
@@ -102,26 +128,23 @@ if __name__ == "__main__":
 
     os.makedirs(install_dir, exist_ok=True)
 
-    # 1. Copy app files over (Safely overwriting code/icons, leaving session/cache untouched)
     current_dir = os.path.dirname(os.path.abspath(__file__))
     files_to_copy = ["Focus.py", "icon.png", "icon.ico"]
-    
+
     for file_name in files_to_copy:
         src = os.path.join(current_dir, file_name)
         if os.path.exists(src):
             shutil.copy(src, install_dir)
             print(f"    + Updated {file_name}")
 
-    # 2. Install / Update dependencies and browser drivers
     install_dependencies()
 
-    # 3. Register shortcuts depending on OS
     if CURRENT_OS == "Windows":
         setup_windows(install_dir)
     elif CURRENT_OS == "Linux":
         setup_linux(install_dir)
 
     action_word = "Updated" if is_update else "Installed"
-    print(f"\n[+] Success! FocusFinder has been successfully {action_word}.")
+    print(f"\n[+] Success! {APP_NAME} has been successfully {action_word}.")
     print("[+] Press Enter to exit.")
-    input()
+    input()   
