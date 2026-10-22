@@ -9,7 +9,7 @@ import threading
 import queue
 from datetime import datetime, date, timedelta
 
-sett_enabled = False
+sett_enabled = True
 weather_enabled = False
 autoupdate = False
 version_number = 0
@@ -905,6 +905,7 @@ class TimetableWidget:
             isPOM = ""
             isPOMenable = "Disabled"
             self.trybutton.configure(text="Time Format: 24H")
+        print(time_format)
 
         
 
