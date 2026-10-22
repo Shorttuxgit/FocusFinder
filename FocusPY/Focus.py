@@ -14,7 +14,16 @@ weather_enabled = False
 autoupdate = False
 version_number = 0
 profile_enabled = False
+time_format = True # False for 24 hour True for 12 hour
 
+
+if time_format == True:
+    formats = "%I"
+    isPOM = ":%P" 
+
+else:
+    formats = "%H"
+    isPOM = ""
 
 #Cython
 
@@ -489,7 +498,7 @@ class FocusFinderApp:
                             start_raw = str(ev.get("start", ""))
                             try:
                                 clean_start = start_raw.split(".")[0].replace("T", " ")
-                                dt_start = datetime.strptime(clean_start, "%Y-%m-%d %H:%M:%S")
+                                dt_start = datetime.strptime(clean_start, f"%Y-%m-%d {formats}:%M:%S:%P")
                                 days_since_sunday = (dt_start.weekday() + 1) % 7
                                 ev_sunday = dt_start - timedelta(days=days_since_sunday)
                                 if ev_sunday.date() == prev_sunday_dt.date():
@@ -739,8 +748,8 @@ class TimetableWidget:
                 clean_start = start_raw.split(".")[0].replace("T", " ")
                 clean_end = end_raw.split(".")[0].replace("T", " ")
 
-                dt_start = datetime.strptime(clean_start, "%Y-%m-%d %H:%M:%S")
-                dt_end = datetime.strptime(clean_end, "%Y-%m-%d %H:%M:%S")
+                dt_start = datetime.strptime(clean_start, f"%Y-%m-%d %H:%M:%S")
+                dt_end = datetime.strptime(clean_end, f"%Y-%m-%d %H:%M:%S")
 
                 # Exclude Saturdays completely (weekday 5 is Saturday)
                 if dt_start.weekday() == 5:
@@ -748,7 +757,7 @@ class TimetableWidget:
 
                 day_key = dt_start.strftime("%Y-%m-%d")
                 day_header = dt_start.strftime("%A, %d %B %Y")
-                time_str = f"{dt_start.strftime('%H:%M')} - {dt_end.strftime('%H:%M')}"
+                time_str = f"{dt_start.strftime(f'{formats}:%M{isPOM}')} - {dt_end.strftime(f'{formats}:%M{isPOM}')}"
             except ValueError:
                 dt_start = datetime.min
                 day_key = "9999-99-99"
@@ -848,7 +857,10 @@ class TimetableWidget:
             settingwin.geometry("400x400")
             settingwin.title("Settings")
             trybutton = ctk.CTkButton(settingwin, text="Try ME!", hover_color="#585b70")
+            trybutton.cget()
+
             inputbox = ctk.CTkEntry(settingwin, placeholder_text="Enter here")
+
             
             trybutton.pack(pady=40)
         else:
