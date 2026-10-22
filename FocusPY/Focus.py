@@ -9,7 +9,7 @@ import threading
 import queue
 from datetime import datetime, date, timedelta
 
-
+sett_enabled = False
 weather_enabled = False
 autoupdate = False
 version_number = 0
