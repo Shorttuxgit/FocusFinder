@@ -730,12 +730,6 @@ class TimetableWidget:
         bottom_frame = ctk.CTkFrame(self.main_container, fg_color=BG_DARK)
         bottom_frame.pack(fill=tk.X)
 
-
-        
-
-
-
-
         today_btn = ctk.CTkButton(
             bottom_frame,
             text="Jump to Today",
@@ -859,19 +853,6 @@ class TimetableWidget:
         settingwin = ctk.CTkToplevel(root)
         settingwin.geometry("400x400")
 
-
-    def POM_event(self):
-        global time_format
-
-        if time_format:
-            time_format = False
-            self.isPOMenable = "Enabled"
-        else:
-            time_format = True
-            self.isPOMenable = "Disabled"
-
-
-
     def open_settings(self):
 
         
@@ -879,7 +860,7 @@ class TimetableWidget:
             settingwin = ctk.CTkToplevel(root)
             settingwin.geometry("400x400")
             settingwin.title("Settings")
-            trybutton = ctk.CTkButton(settingwin, text=isPOMenable, hover_color="#585b70", command=self.POM_event)
+            trybutton = ctk.CTkButton(settingwin, text=isPOMenable, hover_color="#585b70", command=self.toggle_time)
             
             trybutton.pack(pady=20)
 
@@ -890,8 +871,40 @@ class TimetableWidget:
         else:
             messagebox.showinfo("Settings", f"Settings functionality is currently disabled. {sett_enabled}")
 
-        
+    def open_settings(self):
+        if sett_enabled == True:
+            settingwin = ctk.CTkToplevel(self.root)
+            settingwin.geometry("400x400")
+            settingwin.title("Settings")
+            
+            self.trybutton = ctk.CTkButton(
+                settingwin, 
+                text=f"Time Format: 12H" if time_format else "Time Format: 24H", 
+                hover_color="#585b70", 
+                command=self.toggle_time
+            )
+            self.trybutton.pack(pady=20)
 
+            inputbox = ctk.CTkEntry(settingwin, placeholder_text="Enter here")
+            inputbox.pack(pady=20)
+        else:
+            messagebox.showinfo("Settings", f"Settings functionality is currently disabled. {sett_enabled}")
+
+    def toggle_time(self):
+        global time_format, formats, isPOM, isPOMenable
+
+        time_format = not time_format
+
+        if time_format:
+            formats = "%I"
+            isPOM = "%p"
+            isPOMenable = "Enabled"
+            self.trybutton.configure(text="Time Format: 12H ")
+        else: 
+            formats = "%H" 
+            isPOM = ""
+            isPOMenable = "Disabled"
+            self.trybutton.configure(text="Time Format: 24H")
 
         
 
