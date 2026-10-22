@@ -9,18 +9,38 @@ import threading
 import queue
 from datetime import datetime, date, timedelta
 
+config_dir = os.path.expanduser("~/.local/share/focusfinder/config.json")
+
+os.makedirs(
+    os.path.dirname(config_dir),
+    exist_ok=True
+)
 
 try:
-    config = open("config.txt", "x")
+    defaultfile = {
+        "time_format": False,
+        "autoupdate": False,
+        "profile_enabled": False,
+        "weather_enabled": True
+    }
+
+    with open(config_dir, "x") as config:
+        json.dump(defaultfile, config)
+
 except FileExistsError:
     pass
 
+config_read = open(config_dir, "r") 
+settvalue = json.load(config_read)
+
+
 sett_enabled = True
-weather_enabled = False
-autoupdate = False
+weather_enabled = settvalue["weather_enabled"]
+autoupdate = settvalue["autoupdate"]
 version_number = 0
-profile_enabled = False
+profile_enabled = settvalue["profile_enabled"]
 time_format = True # False for 24 hour True for 12 hour
+
 
 
 if time_format == True:
@@ -33,8 +53,6 @@ else:
     isPOM = ""
     isPOMenable = "Disabled" 
 
-
-#Cython
 
 current_Date = datetime.now()
 current_time = current_Date.strftime("%p")
@@ -913,8 +931,6 @@ class TimetableWidget:
         print(time_format)
 
         
-
-
 if __name__ == "__main__":
     root = ctk.CTk(className='focusfinder')
     app = FocusFinderApp(root)
