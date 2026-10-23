@@ -10,3 +10,4 @@ DerivedData/
 .netrc
 /xtool
 test/testjson.py
+test/test.py

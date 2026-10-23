@@ -9,7 +9,6 @@ import threading
 import queue
 from datetime import datetime, date, timedelta
 
-
 config_dir = os.path.expanduser("~/.local/share/focusfinder/config.json")
 
 os.makedirs(
@@ -20,67 +19,51 @@ os.makedirs(
 try:
     defaultfile = {
         "sett_enabled": False,
-        "time_format": False,
+        "time_format": False, # False for 24 hour, True for 12 hour
         "autoupdate": False,
         "profile_enabled": False,
         "weather_enabled": True
     }
 
     with open(config_dir, "x") as config:
-        json.dump(defaultfile, config)
+        json.dump(defaultfile, config, indent=4)
 
 except FileExistsError:
     pass
 
-config_read = open(config_dir, "r") 
-settvalue = json.load(config_read)
+def load_config():
+    with open(config_dir, "r") as config_read:
+        return json.load(config_read)
 
+settvalue = load_config()
 
 sett_enabled = settvalue["sett_enabled"]
 weather_enabled = settvalue["weather_enabled"]
 autoupdate = settvalue["autoupdate"]
 version_number = 0
 profile_enabled = settvalue["profile_enabled"]
-time_format = settvalue["time_format"] # False for 24 hour True for 12 hour
+time_format = settvalue["time_format"]
 
-def write_to_config(sett_enabled, time_format, autoupdate, profile_enabled, weather_enabled):
-    settfile = {
-        f'{{"sett_enabled":"{sett_enabled}" }}',
-        f'{{"time_format":"{time_format}" }}',
-        f'{{"autoupdate":"{autoupdate}" }}',
-        f'{{"sett_enabled":"{profile_enabled}" }}',
-        f'{{"weather_enabled":"{weather_enabled}" }}'
-    }
+def write_to_config(key, value):
+    """Safely updates a specific key in the JSON configuration file."""
+    config_data = load_config()
+    config_data[key] = value
     with open(config_dir, 'w') as writecon:
-        json.dump(settfile, writecon) 
+        json.dump(config_data, writecon, indent=4)
 
-
-
-
-
+# Global time formatting variables
 if time_format == True:
     formats = "%I"
     isPOM = "%p"
     isPOMenable = "Enabled" 
-
 else:
     formats = "%H"
     isPOM = ""
     isPOMenable = "Disabled" 
 
-
 current_Date = datetime.now()
 current_time = current_Date.strftime("%p")
-greeting = ""
-
-if current_time == "AM":
-    greeting = "Good Morning,"
-elif current_time == "PM":
-    greeting = "Good Afternoon,"
-
-    
-
-
+greeting = "Good Morning," if current_time == "AM" else "Good Afternoon,"
 
 # --- OS DETECTION ---
 CURRENT_OS = platform.system()
@@ -93,7 +76,6 @@ except ImportError:
     print("\n[!] Error: 'tkinter' is missing from your Python installation.")
     sys.exit(1)
 
-# Auto-ensure CustomTkinter for rounded UI components
 try:
     import customtkinter as ctk
 except ImportError:
@@ -101,16 +83,12 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "customtkinter"])
     import customtkinter as ctk
 
-# Configure CustomTkinter Dark Theme
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
 SESSION_FILE = "session.json"
 CACHE_FILE = "timetable_cache.json"
-if platform.system() == "Windows":
-    ICON_FILE = "icon.ico"
-else:
-    ICON_FILE = "icon.png"
+ICON_FILE = "icon.ico" if platform.system() == "Windows" else "icon.png"
 BASE_URL = "https://focus.barton.ac.uk"
 
 # --- COLOR PALETTE ---
@@ -123,36 +101,24 @@ FG_SUBTEXT = "#a6adc8"
 FG_ACCENT = "#89b4fa"
 FG_GREEN = "#a6e3a1"
 
-
-
-
-
 def apply_app_icon(root):
-    """Sets the application icon on the window and taskbar."""
-    if CURRENT_OS == "Windows":
-        if os.path.exists(ICON_FILE):  # icon.ico
-            try:
+    if os.path.exists(ICON_FILE):
+        try:
+            if CURRENT_OS == "Windows":
                 root.iconbitmap(ICON_FILE)
-            except Exception:
-                pass
-    else:
-        if os.path.exists(ICON_FILE):  # icon.png
-            try:
+            else:
                 app_icon = tk.PhotoImage(file=ICON_FILE)
                 root.iconphoto(True, app_icon)
-            except Exception:
-                pass   
+        except Exception:
+            pass   
 
 def get_current_week_sunday():
-    """Calculates the date of the Sunday commencing the current week."""
     today = date.today()
     days_since_sunday = (today.weekday() + 1) % 7
     sunday = today - timedelta(days=days_since_sunday)
     return sunday.strftime("%Y-%m-%d")
 
-
 def load_cached_timetable():
-    """Loads cached timetable if it belongs to the current week commencing Sunday."""
     if not os.path.exists(CACHE_FILE):
         return None
     try:
@@ -164,9 +130,7 @@ def load_cached_timetable():
         pass
     return None
 
-
 def save_cached_timetable(events, student_name):
-    """Saves fetched timetable events and student name along with the current week commencing Sunday."""
     try:
         data = {
             "week_commencing": get_current_week_sunday(),
@@ -178,9 +142,7 @@ def save_cached_timetable(events, student_name):
     except Exception as e:
         print(f"[!] Warning: Could not save timetable cache: {e}")
 
-
 def extract_events(livewire_responses):
-    """Parses Livewire response payloads and extracts dispatched timetable events."""
     events = []
     for resp in livewire_responses:
         components = resp if isinstance(resp, list) else resp.get("components", [])
@@ -194,10 +156,6 @@ def extract_events(livewire_responses):
                     events.extend(evt_list)
     return events
 
-
-
-
-
 class FocusFinderApp:
     def __init__(self, root):
         self.root = root
@@ -207,112 +165,51 @@ class FocusFinderApp:
         self.root.configure(fg_color=BG_DARK)
 
         apply_app_icon(self.root)
-
-        # Queue for thread-safe UI updates
         self.msg_queue = queue.Queue()
 
-        # Build initial Loading & Logging Screen
         self.setup_loading_screen()
-        
-        # Start monitoring the queue for log messages
         self.root.after(100, self.process_queue)
 
-        # Launch background fetching worker thread
         self.worker_thread = threading.Thread(target=self.bg_fetch_pipeline, daemon=True)
         self.worker_thread.start()
 
     def setup_loading_screen(self):
-        """Creates the initial status, animation, and logging GUI with rounded cards."""
-        self.loading_frame = ctk.CTkFrame(
-            self.root,
-            fg_color=BG_DARK,
-            corner_radius=0
-        )
+        self.loading_frame = ctk.CTkFrame(self.root, fg_color=BG_DARK, corner_radius=0)
         self.loading_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
-        # Title Card (Rounded Container)
-        header_card = ctk.CTkFrame(
-            self.loading_frame,
-            fg_color=BG_CARD,
-            corner_radius=16
-        )
+        header_card = ctk.CTkFrame(self.loading_frame, fg_color=BG_CARD, corner_radius=16)
         header_card.pack(fill=tk.X, pady=(0, 15), ipadx=15, ipady=12)
 
-        title_label = ctk.CTkLabel(
-            header_card,
-            text="FocusFinder",
-            font=("Arial", 22, "bold"),
-            text_color=FG_TEXT
-        )
+        title_label = ctk.CTkLabel(header_card, text="FocusFinder", font=("Arial", 22, "bold"), text_color=FG_TEXT)
         title_label.pack(anchor="w", padx=15, pady=(10, 0))
 
         self.status_var = tk.StringVar(value="Initializing background engine...")
-        self.status_label = ctk.CTkLabel(
-            header_card,
-            textvariable=self.status_var,
-            font=("Arial", 12, "italic"),
-            text_color=FG_SUBTEXT
-        )
+        self.status_label = ctk.CTkLabel(header_card, textvariable=self.status_var, font=("Arial", 12, "italic"), text_color=FG_SUBTEXT)
         self.status_label.pack(anchor="w", padx=15, pady=(2, 10))
 
-        # Animated Progress Bar (Rounded)
-        self.progress = ctk.CTkProgressBar(
-            self.loading_frame,
-            mode="indeterminate",
-            progress_color=FG_ACCENT,
-            fg_color=BG_SURFACE,
-            corner_radius=8,
-            height=12
-        )
+        self.progress = ctk.CTkProgressBar(self.loading_frame, mode="indeterminate", progress_color=FG_ACCENT, fg_color=BG_SURFACE, corner_radius=8, height=12)
         self.progress.pack(fill=tk.X, pady=(0, 15))
         self.progress.start()
 
-        # Log Card Container (Rounded)
-        log_card = ctk.CTkFrame(
-            self.loading_frame,
-            fg_color=BG_CARD,
-            corner_radius=16
-        )
+        log_card = ctk.CTkFrame(self.loading_frame, fg_color=BG_CARD, corner_radius=16)
         log_card.pack(fill=tk.BOTH, expand=True, ipadx=15, ipady=15)
 
-        log_heading = ctk.CTkLabel(
-            log_card,
-            text="Activity Log:",
-            font=("Arial", 11, "bold"),
-            text_color=FG_ACCENT
-        )
+        log_heading = ctk.CTkLabel(log_card, text="Activity Log:", font=("Arial", 11, "bold"), text_color=FG_ACCENT)
         log_heading.pack(anchor="w", padx=15, pady=(10, 6))
 
-        # Console Text Output Box (Rounded Corners)
-        self.log_box = ctk.CTkTextbox(
-            log_card,
-            fg_color=BG_SURFACE,
-            text_color=FG_GREEN,
-            font=("Consolas", 11),
-            corner_radius=12,
-            border_width=1,
-            border_color=BG_HOVER
-        )
+        self.log_box = ctk.CTkTextbox(log_card, fg_color=BG_SURFACE, text_color=FG_GREEN, font=("Consolas", 11), corner_radius=12, border_width=1, border_color=BG_HOVER)
         self.log_box.pack(fill=tk.BOTH, expand=True, padx=15, pady=(0, 15))
 
     def gui_log(self, text, status_update=None):
-        """Thread-safe log dispatcher that prints live output to terminal AND the GUI."""
-        print(text, flush=True)  # Terminal output
+        print(text, flush=True)
         self.msg_queue.put(("LOG", text))
         if status_update:
             self.msg_queue.put(("STATUS", status_update))
 
     def run_cmd_with_logging(self, cmd_list, description):
-        """Executes a command and streams its output live to both terminal and GUI."""
         self.gui_log(f"[*] {description}...")
         try:
-            process = subprocess.Popen(
-                cmd_list,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1
-            )
+            process = subprocess.Popen(cmd_list, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
             for line in iter(process.stdout.readline, ''):
                 clean_line = line.rstrip()
                 if clean_line:
@@ -325,7 +222,6 @@ class FocusFinderApp:
             self.gui_log(f"[!] Warning during '{description}': {e}")
 
     def process_queue(self):
-        """Processes pending log messages and UI updates on the main thread."""
         try:
             while True:
                 msg_type, content = self.msg_queue.get_nowait()
@@ -345,15 +241,11 @@ class FocusFinderApp:
                     return
         except queue.Empty:
             pass
-
         self.root.after(100, self.process_queue)
 
     def bg_fetch_pipeline(self):
-        """Background pipeline checking weekly cache first, then falling back to live multi-week fetch."""
         try:
             self.gui_log(f"[*] Detected Operating System: {CURRENT_OS} ({platform.release()})")
-            
-            # Check for weekly cached timetable first
             self.gui_log("[*] Checking for weekly cached timetable...")
             cache_result = load_cached_timetable()
             
@@ -364,46 +256,30 @@ class FocusFinderApp:
                 return
 
             self.gui_log("[*] No valid cache for this week. Connecting to portal...")
-
-            # 1. Dependency Verification with Live Terminal Streams
             try:
                 import playwright
             except ImportError:
-                self.run_cmd_with_logging(
-                    [sys.executable, "-m", "pip", "install", "playwright"],
-                    "Installing 'playwright' via pip"
-                )
+                self.run_cmd_with_logging([sys.executable, "-m", "pip", "install", "playwright"], "Installing 'playwright'")
 
             from playwright.sync_api import sync_playwright
 
-            if CURRENT_OS == "Linux":
-                if os.path.exists("/usr/bin/apt-get") or os.path.exists("/bin/apt-get"):
-                    self.run_cmd_with_logging(
-                        [sys.executable, "-m", "playwright", "install-deps", "chromium"],
-                        "Checking Debian/Ubuntu browser system dependencies"
-                    )
+            if CURRENT_OS == "Linux" and (os.path.exists("/usr/bin/apt-get") or os.path.exists("/bin/apt-get")):
+                self.run_cmd_with_logging([sys.executable, "-m", "playwright", "install-deps", "chromium"], "Checking Debian/Ubuntu browser dependencies")
 
-            self.run_cmd_with_logging(
-                [sys.executable, "-m", "playwright", "install", "chromium"],
-                "Ensuring Playwright Chromium binaries"
-            )
+            self.run_cmd_with_logging([sys.executable, "-m", "playwright", "install", "chromium"], "Ensuring Playwright Chromium binaries")
             self.gui_log("[*] Environment checks complete.\n", "Environment verified.")
 
-            # 2. Timetable Fetching & Name Extraction
             result = self.fetch_timetable_data(sync_playwright)
-
             if not result:
                 self.msg_queue.put(("ERROR", "No timetable events could be retrieved."))
             else:
                 events, student_name = result
                 save_cached_timetable(events, student_name)
                 self.msg_queue.put(("DONE", (events, student_name)))
-
         except Exception as e:
             self.msg_queue.put(("ERROR", f"An error occurred: {str(e)}"))
 
     def perform_login(self, p):
-        """Launches interactive browser for authentication."""
         self.gui_log("\n" + "=" * 50, "Authentication Required")
         self.gui_log("ACTION REQUIRED: Complete login in the browser window.")
         self.gui_log("=" * 50 + "\n")
@@ -424,11 +300,9 @@ class FocusFinderApp:
 
         context.storage_state(path=SESSION_FILE)
         self.gui_log("[+] Login detected! Session saved.")
-        self.gui_log("[+] Closing interactive browser...\n")
         browser.close()
 
     def fetch_timetable_data(self, sync_playwright_fn):
-        """Runs headless Playwright automation to collect schedule and extract student name."""
         self.gui_log("[*] Launching browser engine...", "Connecting to Focus portal...")
 
         with sync_playwright_fn() as p:
@@ -440,7 +314,6 @@ class FocusFinderApp:
             page = context.new_page()
 
             livewire_responses = []
-
             def handle_response(response):
                 if "livewire" in response.url or "message" in response.url:
                     try:
@@ -472,131 +345,72 @@ class FocusFinderApp:
                         login_success = True
                         break
                     else:
-                        self.gui_log(f"[!] Re-login attempt {attempt + 1} failed.")
                         browser.close()
                         if os.path.exists(SESSION_FILE):
                             os.remove(SESSION_FILE)
 
                 if not login_success:
-                    self.gui_log("[!] All re-login attempts failed.")
                     return None
 
-            # Extract Student Name from Homepage h1 element ("Welcome Back, Name")
             student_name = "Student"
             try:
-                self.gui_log("[*] Extracting student name from homepage...")
                 h1_text = page.locator("h1.text-3xl.font-bold").inner_text(timeout=5000)
                 if "Welcome Back," in h1_text:
                     student_name = h1_text.replace("Welcome Back,", "").strip()
                 else:
                     student_name = h1_text.strip()
-                self.gui_log(f"[+] Found student name: {student_name}")
-            except Exception as e:
-                self.gui_log(f"[!] Could not extract name from h1 tag: {e}")
+            except Exception:
+                pass
 
             url = page.url
             i = url.rfind('/')
-
-            if(i < 0):
-                self.gui_log("[!] Invalid focus redirect")
+            if i < 0:
                 browser.close()
-                if os.path.exists(SESSION_FILE):
-                    os.remove(SESSION_FILE)
                 return None
-            url = url[:i-len(url)]
-            url += "/timetable"
-
-            self.gui_log(f"[*] Navigating to timetable...", "Fetching timetable data...")
+            url = url[:i-len(url)] + "/timetable"
 
             page.goto(url)
-            
             try:
                 page.wait_for_selector("#powerCalendar", timeout=15000)
                 page.wait_for_load_state("networkidle", timeout=10000)
             except Exception:
                 pass
 
-            self.gui_log("[*] Collecting current week schedule...", "Processing schedule...")
             current_week_events = extract_events(livewire_responses)
             livewire_responses.clear()
 
-            # Collect an entire month's worth of timetable (current week + 4 subsequent weeks)
             all_fetched = list(current_week_events)
             for week_idx in range(4):
                 try:
-                    self.gui_log(f"[*] Fetching week {week_idx + 2}'s timetable...")
                     page.click(".fc-next-button")
                     page.wait_for_timeout(2000)
                     page.wait_for_load_state("networkidle", timeout=5000)
                     week_events = extract_events(livewire_responses)
                     all_fetched.extend(week_events)
                     livewire_responses.clear()
-                except Exception as e:
-                    self.gui_log(f"[!] Could not pull week {week_idx + 2} automatically: {e}")
-
-            # Include previous week's events from existing cache if available
-            previous_week_events = []
-            if os.path.exists(CACHE_FILE):
-                try:
-                    with open(CACHE_FILE, "r") as f:
-                        old_cache = json.load(f)
-                        old_events = old_cache.get("events", [])
-                        current_sunday_str = get_current_week_sunday()
-                        current_sunday_dt = datetime.strptime(current_sunday_str, "%Y-%m-%d")
-                        prev_sunday_dt = current_sunday_dt - timedelta(days=7)
-
-                        for ev in old_events:
-                            start_raw = str(ev.get("start", ""))
-                            try:
-                                clean_start = start_raw.split(".")[0].replace("T", " ")
-                                dt_start = datetime.strptime(clean_start, f"%Y-%m-%d {formats}:%M:%S:%P")
-                                days_since_sunday = (dt_start.weekday() + 1) % 7
-                                ev_sunday = dt_start - timedelta(days=days_since_sunday)
-                                if ev_sunday.date() == prev_sunday_dt.date():
-                                    previous_week_events.append(ev)
-                            except Exception:
-                                pass
                 except Exception:
                     pass
 
-            events = previous_week_events + all_fetched
-
-            if not events:
-                self.gui_log("[*] Secondary fallback extraction via JS context...")
-                events = page.evaluate("""() => {
-                    try {
-                        if (window.calendar) {
-                            return window.calendar.getEvents().map(e => e.toPlainObject());
-                        }
-                        const comp = window.Livewire?.components?.getComponentsByName('full-calendar.full-calendar')[0];
-                        if (comp) {
-                            return comp.ephemeral?.events || comp.canonical?.events || comp.snapshot?.memo?.data?.events || [];
-                        }
-                    } catch (err) {
-                        return [];
-                    }
-                    return [];
-                }""") or []
-
             browser.close()
-            self.gui_log(f"[+] Success! Extracted {len(events)} schedule items.", "Data ready!")
-            return events, student_name
+            return all_fetched, student_name
 
     def transition_to_timetable(self, events, student_name):
-        """Destroys the loading UI and renders the interactive Timetable widget."""
         self.progress.stop()
         self.loading_frame.destroy()
-
-        # Render Main Timetable View
         self.timetable_ui = TimetableWidget(self.root, events, student_name)
 
 
 class TimetableWidget:
-    """Fully Rounded Dark Themed Timetable View Widget."""
     def __init__(self, root, events, student_name):
         self.root = root
         self.events = events
         self.student_name = student_name
+        
+        # Load latest settings state
+        config = load_config()
+        self.time_format = config.get("time_format", False)
+        self.update_time_format_variables()
+
         self.grouped_days = self.process_events(events)
         self.available_dates = sorted(list(self.grouped_days.keys()))
 
@@ -615,142 +429,61 @@ class TimetableWidget:
         self.create_widgets()
         self.update_display()
 
+    def update_time_format_variables(self):
+        global formats, isPOM, isPOMenable
+        if self.time_format:
+            formats = "%I"
+            isPOM = "%p"
+            isPOMenable = "Enabled" 
+        else:
+            formats = "%H"
+            isPOM = ""
+            isPOMenable = "Disabled" 
+
     def configure_styles(self):
-        """Configures TTK treeview colors inside the rounded container."""
         style = ttk.Style()
         style.theme_use("clam")
 
-        style.configure(
-            "Treeview",
-            background=BG_SURFACE,
-            foreground=FG_TEXT,
-            fieldbackground=BG_SURFACE,
-            bordercolor=BG_DARK,
-            rowheight=34,
-            font=("Arial", 13)
-        )
-        style.map(
-            "Treeview",
-            background=[("selected", BG_HOVER)],
-            foreground=[("selected", FG_TEXT)]
-        )
-
-        style.configure(
-            "Treeview.Heading",
-            background=BG_CARD,
-            foreground=FG_ACCENT,
-            bordercolor=BG_DARK,
-            font=("Arial", 10, "bold")
-        )
-
-        style.configure(
-            "Vertical.TScrollbar",
-            gripcount=0,
-            background=BG_CARD,
-            darkcolor=BG_DARK,
-            lightcolor=BG_DARK,
-            troughcolor=BG_SURFACE,
-            bordercolor=BG_DARK,
-            arrowcolor=FG_TEXT
-        )
+        style.configure("Treeview", background=BG_SURFACE, foreground=FG_TEXT, fieldbackground=BG_SURFACE, bordercolor=BG_DARK, rowheight=34, font=("Arial", 13))
+        style.map("Treeview", background=[("selected", BG_HOVER)], foreground=[("selected", FG_TEXT)])
+        style.configure("Treeview.Heading", background=BG_CARD, foreground=FG_ACCENT, bordercolor=BG_DARK, font=("Arial", 10, "bold"))
+        style.configure("Vertical.TScrollbar", gripcount=0, background=BG_CARD, troughcolor=BG_SURFACE, bordercolor=BG_DARK, arrowcolor=FG_TEXT)
 
     def create_widgets(self):
         self.main_container = ctk.CTkFrame(self.root, fg_color=BG_DARK, corner_radius=0)
         self.main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
-        # --- WELCOME BANNER (Rounded Card) ---
-        welcome_card = ctk.CTkFrame(
-            self.main_container,
-            fg_color=BG_CARD,
-            corner_radius=16
-        )
+        welcome_card = ctk.CTkFrame(self.main_container, fg_color=BG_CARD, corner_radius=16)
         welcome_card.pack(fill=tk.X, pady=(0, 12), ipadx=12, ipady=8)
 
-        welcome_label = ctk.CTkLabel(
-            welcome_card,
-            text=f"{greeting} {self.student_name}",
-            font=("Arial", 18, "bold"),
-            text_color=FG_ACCENT
-        )
+        welcome_label = ctk.CTkLabel(welcome_card, text=f"{greeting} {self.student_name}", font=("Arial", 18, "bold"), text_color=FG_ACCENT)
         welcome_label.pack(side=tk.LEFT, padx=12, pady=6)
 
-        sett_btn = ctk.CTkButton(
-                welcome_card,
-                text="Settings",
-                font=("Arial", 12, "bold"),
-                fg_color=BG_HOVER,
-                hover_color="#585b70",
-                text_color=FG_TEXT,
-                command=self.open_settings,
-                corner_radius=12,
-                height=36,
-                width=90
+        if sett_enabled:
+            sett_btn = ctk.CTkButton(
+                welcome_card, text="Settings", font=("Arial", 12, "bold"),
+                fg_color=BG_HOVER, hover_color="#585b70", text_color=FG_TEXT,
+                command=self.open_settings, corner_radius=12, height=36, width=90
             )
-        sett_btn.pack(side=tk.RIGHT, padx=10)
+            sett_btn.pack(side=tk.RIGHT, padx=10)
 
-        # --- TOP NAVIGATION BAR (Rounded Card) ---
-        nav_card = ctk.CTkFrame(
-            self.main_container,
-            fg_color=BG_CARD,
-            corner_radius=16
-        )
+        nav_card = ctk.CTkFrame(self.main_container, fg_color=BG_CARD, corner_radius=16)
         nav_card.pack(fill=tk.X, pady=(0, 15), ipadx=12, ipady=10)
 
-
-        self.prev_btn = ctk.CTkButton(
-            nav_card,
-            text="<< Previous Day",
-            command=self.prev_day,
-            font=("Arial", 12, "bold"),
-            fg_color=BG_HOVER,
-            hover_color="#585b70",
-            text_color=FG_TEXT,
-            corner_radius=12,
-            height=36,
-            width=140
-        )
+        self.prev_btn = ctk.CTkButton(nav_card, text="<< Previous Day", command=self.prev_day, font=("Arial", 12, "bold"), fg_color=BG_HOVER, hover_color="#585b70", text_color=FG_TEXT, corner_radius=12, height=36, width=140)
         self.prev_btn.pack(side=tk.LEFT, padx=(10, 0))
 
-        self.date_label = ctk.CTkLabel(
-            nav_card,
-            text="",
-            font=("Arial", 14, "bold"),
-            text_color=FG_TEXT
-        )
+        self.date_label = ctk.CTkLabel(nav_card, text="", font=("Arial", 14, "bold"), text_color=FG_TEXT)
         self.date_label.pack(side=tk.LEFT, expand=True)
 
-        self.next_btn = ctk.CTkButton(
-            nav_card,
-            text="Next Day >>",
-            command=self.next_day,
-            font=("Arial", 12, "bold"),
-            fg_color=BG_HOVER,
-            hover_color="#585b70",
-            text_color=FG_TEXT,
-            corner_radius=12,
-            height=36,
-            width=140
-        )
+        self.next_btn = ctk.CTkButton(nav_card, text="Next Day >>", command=self.next_day, font=("Arial", 12, "bold"), fg_color=BG_HOVER, hover_color="#585b70", text_color=FG_TEXT, corner_radius=12, height=36, width=140)
         self.next_btn.pack(side=tk.RIGHT, padx=(0, 10))
-        sett_btn.pack(side=tk.RIGHT)
 
-        if sett_enabled == False:
-            sett_btn.destroy()
-
-
-        # --- TABLE CONTAINER (Rounded Outer Box) ---
-        table_card = ctk.CTkFrame(
-            self.main_container,
-            fg_color=BG_SURFACE,
-            corner_radius=16,
-            border_width=1,
-            border_color=BG_HOVER
-        )
+        table_card = ctk.CTkFrame(self.main_container, fg_color=BG_SURFACE, corner_radius=16, border_width=1, border_color=BG_HOVER)
         table_card.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
 
         columns = ("Time", "Event Title", "Room", "Staff")
         self.tree = ttk.Treeview(table_card, columns=columns, show="headings")
-
         self.tree.heading("Time", text="Time")
         self.tree.heading("Event Title", text="Event Title")
         self.tree.heading("Room", text="Room")
@@ -767,22 +500,10 @@ class TimetableWidget:
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(12, 0), pady=12)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 12), pady=12)
 
-        # --- BOTTOM ACTION BAR ---
         bottom_frame = ctk.CTkFrame(self.main_container, fg_color=BG_DARK)
         bottom_frame.pack(fill=tk.X)
 
-        today_btn = ctk.CTkButton(
-            bottom_frame,
-            text="Jump to Today",
-            command=self.jump_to_today,
-            font=("Arial", 12, "bold"),
-            fg_color=FG_ACCENT,
-            hover_color="#b4befe",
-            text_color=BG_DARK,
-            corner_radius=20,
-            height=40,
-            width=160
-        )
+        today_btn = ctk.CTkButton(bottom_frame, text="Jump to Today", command=self.jump_to_today, font=("Arial", 12, "bold"), fg_color=FG_ACCENT, hover_color="#b4befe", text_color=BG_DARK, corner_radius=20, height=40, width=160)
         today_btn.pack(side=tk.BOTTOM)
 
     def process_events(self, events):
@@ -795,11 +516,10 @@ class TimetableWidget:
                 clean_start = start_raw.split(".")[0].replace("T", " ")
                 clean_end = end_raw.split(".")[0].replace("T", " ")
 
-                dt_start = datetime.strptime(clean_start, f"%Y-%m-%d %H:%M:%S")
-                dt_end = datetime.strptime(clean_end, f"%Y-%m-%d %H:%M:%S")
+                dt_start = datetime.strptime(clean_start, "%Y-%m-%d %H:%M:%S")
+                dt_end = datetime.strptime(clean_end, "%Y-%m-%d %H:%M:%S")
 
-                # Exclude Saturdays completely (weekday 5 is Saturday)
-                if dt_start.weekday() == 5:
+                if dt_start.weekday() == 5: # Exclude Saturday
                     continue
 
                 day_key = dt_start.strftime("%Y-%m-%d")
@@ -812,11 +532,10 @@ class TimetableWidget:
                 time_str = f"{start_raw} - {end_raw}"
 
             title = ev.get("title") or "N/A"
-            room = ev.get("room") or ev.get("extendedProps", {}).get("room") or "—"
-            staff = ev.get("staff") or ev.get("extendedProps", {}).get("staff") or "—"
-
-            room = str(room).strip() if str(room).strip() else "—"
-            staff = str(staff).strip() if str(staff).strip() else "—"
+            room = str(ev.get("room") or ev.get("extendedProps", {}).get("room") or "—").strip()
+            staff = str(ev.get("staff") or ev.get("extendedProps", {}).get("staff") or "—").strip()
+            room = room if room else "—"
+            staff = staff if staff else "—"
 
             if day_key not in grouped:
                 grouped[day_key] = {"header": day_header, "events": []}
@@ -853,16 +572,8 @@ class TimetableWidget:
         has_prev = self.current_index > 0
         has_next = self.current_index < len(self.available_dates) - 1
 
-        self.prev_btn.configure(
-            state="normal" if has_prev else "disabled",
-            fg_color=BG_HOVER if has_prev else BG_SURFACE,
-            text_color=FG_TEXT if has_prev else FG_SUBTEXT
-        )
-        self.next_btn.configure(
-            state="normal" if has_next else "disabled",
-            fg_color=BG_HOVER if has_next else BG_SURFACE,
-            text_color=FG_TEXT if has_next else FG_SUBTEXT
-        )
+        self.prev_btn.configure(state="normal" if has_prev else "disabled", fg_color=BG_HOVER if has_prev else BG_SURFACE, text_color=FG_TEXT if has_prev else FG_SUBTEXT)
+        self.next_btn.configure(state="normal" if has_next else "disabled", fg_color=BG_HOVER if has_next else BG_SURFACE, text_color=FG_TEXT if has_next else FG_SUBTEXT)
 
     def prev_day(self):
         if self.current_index > 0:
@@ -888,75 +599,38 @@ class TimetableWidget:
         else:
             messagebox.showinfo("Info", "Time to Relax! No Lessons Today!!")
 
-
-
-    def settings():
-        settingwin = ctk.CTkToplevel(root)
-        settingwin.geometry("400x400")
-
     def open_settings(self):
-
-        
-        if sett_enabled == True:
-            settingwin = ctk.CTkToplevel(root)
-            settingwin.geometry("400x400")
-            settingwin.title("Settings")
-            trybutton = ctk.CTkButton(settingwin, text=isPOMenable, hover_color="#585b70", command=self.toggle_time)
-            
-            trybutton.pack(pady=20)
-
-            inputbox = ctk.CTkEntry(settingwin, placeholder_text="Enter here")
-
-            
-            trybutton.pack(pady=40)
-        else:
-            messagebox.showinfo("Settings", f"Settings functionality is currently disabled. {sett_enabled}")
-
-    def open_settings(self):
-        if sett_enabled == True:
+        if sett_enabled:
             settingwin = ctk.CTkToplevel(self.root)
             settingwin.geometry("400x400")
             settingwin.title("Settings")
             
             self.trybutton = ctk.CTkButton(
                 settingwin, 
-                text=f"Time Format: 12H" if time_format else "Time Format: 24H", 
+                text=f"Time Format: 12H" if self.time_format else "Time Format: 24H", 
                 hover_color="#585b70", 
                 command=self.toggle_time
             )
             self.trybutton.pack(pady=20)
-
         else:
-            messagebox.showinfo("Settings", f"Settings functionality is currently disabled. {sett_enabled}")
+            messagebox.showinfo("Settings", "Settings functionality is currently disabled.")
 
     def toggle_time(self):
-        global time_format, formats, isPOM, isPOMenable
-
-        time_format = not time_format
-
-        if time_format:
-            formats = "%I"
-            isPOM = "%p"
-            isPOMenable = "Enabled"
-            jsonPOM = True
-            self.trybutton.configure(text="Time Format: 12H")
-            write_to_config(jsonPOM)
-
-        else: 
-            formats = "%H" 
-            isPOM = ""
-            isPOMenable = "Disabled"
-            jsonPOM = False
-            self.trybutton.configure(text="Time Format: 24H")
-            write_to_config(jsonPOM)
-        print(time_format)
-
+        global time_format
+        self.time_format = not self.time_format
+        time_format = self.time_format
         
+        self.update_time_format_variables()
+        write_to_config("time_format", self.time_format)
+
+        self.trybutton.configure(text=f"Time Format: 12H" if self.time_format else "Time Format: 24H")
+        
+        # Reprocess events and refresh table immediately
+        self.grouped_days = self.process_events(self.events)
+        self.update_display()
+
+
 if __name__ == "__main__":
     root = ctk.CTk(className='focusfinder')
     app = FocusFinderApp(root)
     root.mainloop()
-
-
-
-
