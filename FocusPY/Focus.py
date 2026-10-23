@@ -951,11 +951,12 @@ class TimetableWidget:
             write_to_config(jsonPOM)
         print(time_format)
 
-
         
 if __name__ == "__main__":
     root = ctk.CTk(className='focusfinder')
     app = FocusFinderApp(root)
     root.mainloop()
+
+
 
 
