@@ -10,3 +10,9 @@ DerivedData/
 .netrc
 /xtool
 test/testjson.py
+focustest/__pycache__/main.cpython-314.pyc
+focustest/src/__pycache__/config_manager.cpython-314.pyc
+focustest/src/__pycache__/constants.cpython-314.pyc
+focustest/src/__pycache__/scraper.cpython-314.pyc
+focustest/src/__pycache__/ui_loading.cpython-314.pyc
+focustest/src/__pycache__/ui_timetable.cpython-314.pyc
