@@ -18,7 +18,7 @@ os.makedirs(
 
 try:
     defaultfile = {
-        "sett_enabled": True,
+        "sett_enabled": False,
         "time_format": False,
         "autoupdate": False,
         "profile_enabled": False,
