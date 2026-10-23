@@ -18,6 +18,7 @@ os.makedirs(
 
 try:
     defaultfile = {
+        "sett_enabled": False,
         "time_format": False,
         "autoupdate": False,
         "profile_enabled": False,
@@ -34,12 +35,25 @@ config_read = open(config_dir, "r")
 settvalue = json.load(config_read)
 
 
-sett_enabled = True
+sett_enabled = settvalue["sett_enabled"]
 weather_enabled = settvalue["weather_enabled"]
 autoupdate = settvalue["autoupdate"]
 version_number = 0
 profile_enabled = settvalue["profile_enabled"]
-time_format = True # False for 24 hour True for 12 hour
+time_format = settvalue["time_format"] # False for 24 hour True for 12 hour
+
+def write_to_config(sett_enabled, time_format, autoupdate, profile_enabled, weather_enabled):
+    settfile = {
+        f'{{"sett_enabled":"{sett_enabled}" }}',
+        f'{{"time_format":"{time_format}" }}',
+        f'{{"autoupdate":"{autoupdate}" }}',
+        f'{{"sett_enabled":"{profile_enabled}" }}',
+        f'{{"weather_enabled":"{weather_enabled}" }}'
+    }
+    with open(config_dir, 'w') as writecon:
+        json.dump(settfile, writecon) 
+
+
 
 
 
@@ -921,14 +935,19 @@ class TimetableWidget:
             formats = "%I"
             isPOM = "%p"
             isPOMenable = "Enabled"
+            jsonPOM = True
             self.trybutton.configure(text="Time Format: 12H")
+            write_to_config(jsonPOM)
 
         else: 
             formats = "%H" 
             isPOM = ""
             isPOMenable = "Disabled"
+            jsonPOM = False
             self.trybutton.configure(text="Time Format: 24H")
+            write_to_config(jsonPOM)
         print(time_format)
+
 
         
 if __name__ == "__main__":
