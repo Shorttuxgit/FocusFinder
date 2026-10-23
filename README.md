@@ -1,9 +1,6 @@
 # FocusFinder
 A small project aiming to move the focus system to a real application on Android and IOS (with a caveat).
 
-## Core
-The base engine that drives the rest of the apps.
-
 ## FocusPy
 A fully functional app running purely in one python file.
 
