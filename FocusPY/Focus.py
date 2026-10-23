@@ -9,6 +9,7 @@ import threading
 import queue
 from datetime import datetime, date, timedelta
 
+
 config_dir = os.path.expanduser("~/.local/share/focusfinder/config.json")
 
 os.makedirs(
@@ -673,19 +674,18 @@ class TimetableWidget:
         )
         welcome_label.pack(side=tk.LEFT, padx=12, pady=6)
 
-
         sett_btn = ctk.CTkButton(
-            welcome_card,
-            text="Settings",
-            font=("Arial", 12, "bold"),
-            fg_color=BG_HOVER,
-            hover_color="#585b70",
-            text_color=FG_TEXT,
-            command=self.open_settings,
-            corner_radius=12,
-            height=36,
-            width=90
-        )
+                welcome_card,
+                text="Settings",
+                font=("Arial", 12, "bold"),
+                fg_color=BG_HOVER,
+                hover_color="#585b70",
+                text_color=FG_TEXT,
+                command=self.open_settings,
+                corner_radius=12,
+                height=36,
+                width=90
+            )
         sett_btn.pack(side=tk.RIGHT, padx=10)
 
         # --- TOP NAVIGATION BAR (Rounded Card) ---
@@ -733,6 +733,9 @@ class TimetableWidget:
         )
         self.next_btn.pack(side=tk.RIGHT, padx=(0, 10))
         sett_btn.pack(side=tk.RIGHT)
+
+        if sett_enabled == False:
+            sett_btn.destroy()
 
 
         # --- TABLE CONTAINER (Rounded Outer Box) ---
