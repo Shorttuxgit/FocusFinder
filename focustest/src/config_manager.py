@@ -1,10 +1,11 @@
 import os
 import json
 
-CONFIG_DIR = os.path.expanduser("~/.local/share/focusfinder/config.json")
+# Gets the folder where this script (or compiled app) is currently running
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_DIR = os.path.join(BASE_DIR, "config.json")
 
 def init_config():
-    os.makedirs(os.path.dirname(CONFIG_DIR), exist_ok=True)
     try:
         default_file = {
             "sett_enabled": False,

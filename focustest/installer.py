@@ -47,7 +47,8 @@ def setup_windows(install_dir):
     """Handles installation, script placement, and Start Menu shortcut on Windows."""
     print("[*] Configuring Windows integration...")
 
-    target_script = os.path.join(install_dir, "main.py")
+    # Target the .pyw version for Windows background execution
+    target_script = os.path.join(install_dir, "main.pyw")
     icon_path = os.path.join(install_dir, "icon.ico")
 
     pythonw = find_pythonw()
@@ -101,7 +102,6 @@ Categories=Education;Utility;
 
     os.chmod(desktop_file_path, 0o755)
 
-    # Refresh GNOME/Fedora application database
     if shutil.which("update-desktop-database"):
         subprocess.run(["update-desktop-database", applications_dir], capture_output=True)
 
@@ -138,15 +138,20 @@ if __name__ == "__main__":
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # 1. Copy main entry point and icons from root
+    #Copy root files (Handle main.py -> main.pyw conversion on Windows)
     root_files_to_copy = ["main.py", "icon.png", "icon.ico"]
     for file_name in root_files_to_copy:
         src = os.path.join(current_dir, file_name)
         if os.path.exists(src):
-            shutil.copy(src, install_dir)
-            print(f"    + Updated {file_name}")
+            if file_name == "main.py" and CURRENT_OS == "Windows":
+                dst = os.path.join(install_dir, "main.pyw")
+                shutil.copy(src, dst)
+                print("    + Updated main.pyw (Windows GUI mode)")
+            else:
+                shutil.copy(src, install_dir)
+                print(f"    + Updated {file_name}")
 
-    #Copy the entire 'src' subfolder recursively
+    #Copy the entire src subfolder 
     local_src_dir = os.path.join(current_dir, "src")
     install_src_dir = os.path.join(install_dir, "src")
     
@@ -164,14 +169,16 @@ if __name__ == "__main__":
                 shutil.copytree(s, d)
                 print(f"    + Updated src/{item}/ directory")
 
-    #Clean up legacy single-file script if it exists
-    old_focus_script = os.path.join(install_dir, "Focus.py")
-    if os.path.exists(old_focus_script):
-        try:
-            os.remove(old_focus_script)
-            print("    + Cleaned up legacy Focus.py")
-        except Exception as e:
-            print(f"[!] Warning: Could not remove old Focus.py: {e}")
+    #Clean up legacy
+    legacy_files = ["Focus.py", "Focus.pyw", "focus.py", "focus.pyw", "main.py"] if CURRENT_OS == "Windows" else ["Focus.py", "Focus.pyw", "focus.py", "focus.pyw"]
+    for legacy in legacy_files:
+        legacy_path = os.path.join(install_dir, legacy)
+        if os.path.exists(legacy_path):
+            try:
+                os.remove(legacy_path)
+                print(f"    + Cleaned up legacy {legacy}")
+            except Exception as e:
+                print(f"[!] Warning: Could not remove old {legacy}: {e}")
 
     install_dependencies()
 
