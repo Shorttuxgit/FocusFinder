@@ -8,3 +8,4 @@ if __name__ == "__main__":
     root = ctk.CTk(className='focusfinder')
     app = FocusFinderApp(root)
     root.mainloop()
+    #Run me!
