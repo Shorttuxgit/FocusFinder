@@ -213,23 +213,25 @@ class TimetableWidget:
             settingwin = ctk.CTkToplevel(self.root)
             settingwin.geometry("400x400")
             settingwin.title("Settings")
-            
-            self.trybutton = ctk.CTkButton(
+            #tracking the switch state
+            self.time_var = ctk.IntVar(value=1 if self.time_format else 0)
+
+            self.time_switch = ctk.CTkSwitch(
                 settingwin, 
-                text=f"Time Format: 12H" if self.time_format else "Time Format: 24H", 
-                hover_color="#585b70", 
-                command=self.toggle_time
+                text="Use 12-Hour Time Format", 
+                command=self.toggle_time,
+                variable=self.time_var,
+                onvalue=1,
+                offvalue=0
             )
-            self.trybutton.pack(pady=20)
+            self.time_switch.pack(pady=20, padx=20, anchor="w")
+            
         else:
             messagebox.showinfo("Settings", "Settings functionality is currently disabled.")
 
     def toggle_time(self):
-        self.time_format = not self.time_format
+        self.time_format = bool(self.time_var.get())  
         self.update_time_format_variables()
-        write_to_config("time_format", self.time_format)
-
-        self.trybutton.configure(text=f"Time Format: 12H" if self.time_format else "Time Format: 24H")
-        
+        write_to_config("time_format", self.time_format)        
         self.grouped_days = self.process_events(self.events)
         self.update_display()
