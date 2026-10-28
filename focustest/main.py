@@ -1,5 +1,11 @@
-import customtkinter as ctk
+try:
+    import customtkinter as ctk
+except ImportError:
+    import pip
+    pip.main(['install', 'customtkinter'])
+    import customtkinter as ctk
 from src.ui_loading import FocusFinderApp
+
 
 if __name__ == "__main__":
     ctk.set_appearance_mode("Dark")

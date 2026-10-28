@@ -6,9 +6,11 @@ BASE_URL = "https://focus.barton.ac.uk"
 
 SESSION_FILE = "session.json"
 CACHE_FILE = "timetable_cache.json"
+FRIENDS_FILE = "friends_cache.json"
+CONFIG_FILE = "config.json"
 ICON_FILE = "icon.ico" if CURRENT_OS == "Windows" else "icon.png"
 
-# --- COLOR PALETTE ---
+# Define user interface color palette constants
 BG_DARK = "#1e1e2e"
 BG_SURFACE = "#181825"
 BG_CARD = "#313244"
