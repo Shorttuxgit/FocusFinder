@@ -142,7 +142,7 @@ class TimetableWidget:
 
         if self.sett_enabled or self.friends_system_enabled:
             options_btn = ctk.CTkButton(
-                bottom_inner, text="Options ⚙", font=("Arial", 12, "bold"),
+                bottom_inner, text="Options", font=("Arial", 12, "bold"),
                 fg_color=BG_HOVER, hover_color="#585b70", text_color=FG_TEXT,
                 command=self.open_options_menu, corner_radius=12, height=36, width=110
             )
