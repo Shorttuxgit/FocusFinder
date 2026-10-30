@@ -23,6 +23,7 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.ScrollView
 import android.widget.TextView
+import android.webkit.CookieManager;
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -90,6 +91,12 @@ class timetable_day
     constructor(dow : Int)
     {
         day_of_week = dow;
+    }
+    constructor(day : timetable_day, dow : Int)
+    {
+        day_of_week = dow;
+        for(i in 0 until 4)
+            events[i] = day.events[i];
     }
     fun add_ev(ev : timetable_event)
     {
@@ -167,6 +174,7 @@ data class week_day_list
 data class week_cached
 (
     @PrimaryKey val week_id : Int,
+    @ColumnInfo val day_cached : Int,
     @ColumnInfo val week_days : week_day_list,
 )
 
@@ -195,7 +203,7 @@ interface week_dao
     suspend fun delete_all();
 }
 @TypeConverters(value = [week_list_converter::class])
-@Database(entities = [week_cached::class], version = 1, exportSchema = false)
+@Database(entities = [week_cached::class], version = 2, exportSchema = false)
 abstract class week_database : RoomDatabase()
 {
     abstract fun get_week_dao() : week_dao;
@@ -207,7 +215,7 @@ abstract class week_database : RoomDatabase()
         {
             return INSTANCE ?: synchronized(this)
             {
-                val instance = Room.databaseBuilder(ctx.applicationContext, week_database::class.java, "week_database").build();
+                val instance = Room.databaseBuilder(ctx.applicationContext, week_database::class.java, "week_database").fallbackToDestructiveMigration().build();
                 INSTANCE = instance;
                 instance;
             }
@@ -361,10 +369,10 @@ class weather_day
 class focus_main : AppCompatActivity() {
     var date : GregorianCalendar = GregorianCalendar();
     var cookies : String? = null;
-    var sdfmt4 : SimpleDateFormat = SimpleDateFormat("EEEE, dd'th' MMMM yyyy");
-    var sdfmt3 : SimpleDateFormat = SimpleDateFormat("EEEE, dd'rd' MMMM yyyy");
-    var sdfmt2 : SimpleDateFormat = SimpleDateFormat("EEEE, dd'nd' MMMM yyyy");
-    var sdfmt1 : SimpleDateFormat = SimpleDateFormat("EEEE, dd'st' MMMM yyyy");
+    var sdfmt4 : SimpleDateFormat = SimpleDateFormat("EEEE, d'th' MMMM yyyy");
+    var sdfmt3 : SimpleDateFormat = SimpleDateFormat("EEEE, d'rd' MMMM yyyy");
+    var sdfmt2 : SimpleDateFormat = SimpleDateFormat("EEEE, d'nd' MMMM yyyy");
+    var sdfmt1 : SimpleDateFormat = SimpleDateFormat("EEEE, d'st' MMMM yyyy");
     var json_sdf : SimpleDateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     var days = arrayOfNulls<timetable_day>(6);
     var wdays = arrayOfNulls<weather_day>(7);
@@ -374,6 +382,8 @@ class focus_main : AppCompatActivity() {
     var nulltimetable_day : timetable_day? = null;
     var cache_view : week_view? = null;
     var fusedLocationClient: FusedLocationProviderClient? = null;
+    var longt : Double = 0.0;
+    var latt : Double = 0.0;
     fun update_texts()
     {
         var d = date.get(Calendar.DAY_OF_WEEK) - 2;
@@ -414,7 +424,7 @@ class focus_main : AppCompatActivity() {
         }
         else if (weekd.is_raining())
             sst += "Rain";
-        sst += " (${weekd.min_temp}°C - ${weekd.max_temp}°C)"
+        sst += String.format(" (${weekd.min_temp}°C - ${weekd.max_temp}°C) at %.1f,%.1f", latt, longt);
         weahter.text = sst;
         var iview = findViewById<ImageView>(R.id.imageView);
         iview.setImageDrawable(weekd.wdraw);
@@ -424,7 +434,7 @@ class focus_main : AppCompatActivity() {
     {
         for(i in 0 until 6)
         {
-            days[i] = timetable_day(i);
+            days[i] = timetable_day(nulltimetable_day!!, i);
         }
         Log.println(Log.DEBUG, "dbg", "update_timetable with events");
         for(i in 0 until events.length())
@@ -488,12 +498,18 @@ class focus_main : AppCompatActivity() {
             val wd : week_day = week_day(i, day?.describe()!!);
             wlist.day_list = wlist.day_list + wd;
         }
+        var day = g.get(Calendar.DAY_OF_YEAR);
+        var hour_m = g.get(Calendar.HOUR_OF_DAY);
+        var minu = g.get(Calendar.MINUTE);
+
+        if(hour_m < 8 || (hour_m == 8 && minu <= 45))
+            day--;
         var week_id = g.get(Calendar.WEEK_OF_YEAR);
         val calendar = Calendar.getInstance(Locale.getDefault())
         val firstDayInt = calendar.getFirstDayOfWeek()
         if(g.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY && firstDayInt == Calendar.SUNDAY)
             week_id--;
-        var cache_save = week_cached(week_id, wlist);
+        var cache_save = week_cached(week_id, day, wlist);
 
         cache_view?.insert(cache_save);
 
@@ -631,45 +647,45 @@ class focus_main : AppCompatActivity() {
     {
         return when (weather_code) {
 
-            0 -> if (is_day) "clear-day" else "clear-night"
-            1 -> if (is_day) "clear-day" else "clear-night"
+            0 -> if (is_day) "CLEAR" else "CLEAR0"
+            1 -> if (is_day) "PCLOUDY1" else "PCLOUDY0"
 
-            2 -> if (is_day) "partly-cloudy-day" else "partly-cloudy-night"
+            2 -> if (is_day) "MCLOUDY1" else "MCLOUDY0"
 
-            3 -> if (is_day) "cloudy" else "cloudy"
+            3 -> if (is_day) "MCLOUDY" else "MCLOUDY"
 
-            45 -> if (is_day) "fog-day" else "fog-night"
-            48 -> if (is_day) "haze-day" else "haze-night"
+            45 -> if (is_day) "FOG1" else "FOG0"
+            48 -> if (is_day) "FOG" else "FOG"
 
-            51 -> if (is_day) "partly-cloudy-day-drizzle" else "partly-cloudy-night-drizzle"
-            53 -> if (is_day) "drizzle" else "drizzle"
-            55 -> if (is_day) "extreme-day-drizzle" else "extreme-night-drizzle"
-            56 -> if (is_day) "overcast-drizzle" else "overcast-drizzle"
-            57 -> if (is_day) "extreme-drizzle" else "extreme-drizzle"
+            51 -> if (is_day) "RAIN1" else "RAIN0"
+            53 -> if (is_day) "RAIN" else "RAIN"
+            55 -> if (is_day) "SHOWER1" else "SHOWER0"
+            56 -> if (is_day) "SLEET1" else "RAIN"
+            57 -> if (is_day) "SLEET1" else "SLEET0"
 
-            61 -> if (is_day) "partly-cloudy-day-rain" else "partly-cloudy-night-rain"
-            63 -> if (is_day) "rain" else "rain"
-            65 -> if (is_day) "extreme-day-rain" else "extreme-night-rain"
-            66 -> if (is_day) "overcast-rain" else "overcast-rain"
-            67 -> if (is_day) "extreme-rain" else "extreme-rain"
+            61 -> if (is_day) "RAIN1" else "RAIN0"
+            63 -> if (is_day) "RAIN" else "RAIN"
+            65 -> if (is_day) "SHOWER1" else "SHOWER0"
+            66 -> if (is_day) "SHOWER1" else "SHOWER0"
+            67 -> if (is_day) "SHOWER1" else "SHOWER0"
 
-            71 -> if (is_day) "partly-cloudy-day-snow" else "partly-cloudy-night-snow"
-            73 -> if (is_day) "snow" else "snow"
-            75 -> if (is_day) "extreme-day-snow" else "extreme-night-snow"
-            77 -> if (is_day) "extreme-snow" else "extreme-snow"
+            71 -> if (is_day) "LSNOW1" else "LSNOW0"
+            73 -> if (is_day) "LSNOW" else "LSNOW"
+            75 -> if (is_day) "SNOW1" else "SNOW0"
+            77 -> if (is_day) "SNOW" else "SNOW"
 
-            80 -> if (is_day) "mostly-clear-day-rain" else "mostly-clear-night-rain"
-            81 -> if (is_day) "mostly-clear-day-rain" else "mostly-clear-night-rain"
-            82 -> if (is_day) "extreme-day-rain" else "extreme-night-rain"
+            80 -> if (is_day) "SHOWER1" else "SHOWER0"
+            81 -> if (is_day) "SHOWER1" else "SHOWER0"
+            82 -> if (is_day) "SHOWER1" else "SHOWER0"
 
-            85 -> if (is_day) "mostly-clear-day-snow" else "mostly-clear-night-snow"
-            86 -> if (is_day) "mostly-clear-day-snow" else "mostly-clear-night-snow"
+            85 -> if (is_day) "LSNOW1" else "LSNOW0"
+            86 -> if (is_day) "SNOW1" else "SNOW0"
 
-            95 -> if (is_day) "thunderstorms-day" else "thunderstorms-night"
-            96 -> if (is_day) "thunderstorms-day-hail" else "thunderstorms-night-hail"
-            99 -> if (is_day) "thunderstorms-extreme-day-hail" else "thunderstorms-extreme-night-hail"
+            95 -> if (is_day) "TSTORM1" else "TSTORM0"
+            96 -> if (is_day) "TSHOWER1" else "TSHOWER0"
+            99 -> if (is_day) "TSHOWER" else "TSHOWER"
 
-            else -> ""
+            else -> "UNKNOWN"
         }
     }
     fun load_weather_days(obj : JSONObject)
@@ -716,7 +732,7 @@ class focus_main : AppCompatActivity() {
             if(bitmap == null)
             {
                 val icon: String = weather_code_to_url(weather_code, is_day)
-                val url = "cdn.meteocons.com/3.0.0-next.10/svg-static/fill/${icon}.svg";
+                val url = "raw.githubusercontent.com/Grabstertv/WeatherNowIcons/refs/heads/main/SVG/${icon}.svg";
                 val aurl = URL(
                     "https", url.split("/")[0], 443, url.split("/").stream().skip(1).collect(
                         Collectors.joining("/")
@@ -728,7 +744,14 @@ class focus_main : AppCompatActivity() {
                     setRequestProperty("User-Agent", "curl/7.81.0");
                     Log.println(Log.DEBUG, "tag", "svg: ${url}, ${responseMessage}");
 
-                    var svg = SVG.getFromInputStream(getInputStream());
+                    val _t = responseCode;
+                    Log.println(Log.DEBUG, "lg", "code $_t for $url");
+
+                    val line = getInputStream().bufferedReader().readText();
+
+                    Log.println(Log.DEBUG, "tags", "svg for $url = $line");
+
+                    var svg = SVG.getFromString(line);
                     bitmap = PictureDrawable(svg.renderToPicture());
                     //var bm_img: Bitmap = SVg.decodeStream(getInputStream());
                     //bitmap = bm_img;
@@ -751,6 +774,8 @@ class focus_main : AppCompatActivity() {
         with(url.openConnection() as HttpsURLConnection)
         {
             setRequestProperty("User-Agent", "curl/7.81.0");
+            val _t = responseCode;
+            Log.println(Log.DEBUG, "lg", "code $_t for ipinfo.io");
             val reader = getInputStream().bufferedReader();
             var line: String = reader.readText();
             sb.append(line);
@@ -765,6 +790,12 @@ class focus_main : AppCompatActivity() {
 
         long.d = longitude;
         lat.d = latitude;
+    }
+    fun get_long_lat_fixed(long : fuck_you_kotlin, lat : fuck_you_kotlin) : Boolean
+    {
+        long.d = -1.3660916585283378;
+        lat.d = 50.96210550753733;
+        return true;
     }
     fun get_long_lat_net(long : fuck_you_kotlin, lat : fuck_you_kotlin) : Boolean
     {
@@ -805,11 +836,16 @@ class focus_main : AppCompatActivity() {
                 var longd : fuck_you_kotlin = fuck_you_kotlin(0.0);
                 var latitude : Double;
                 var longitude : Double;
-                if(!get_long_lat_net(longd, latd))
-                    get_long_lat_ip(longd, latd);
+                if(!get_long_lat_fixed(longd, latd))
+                    if(!get_long_lat_net(longd, latd))
+                        get_long_lat_ip(longd, latd);
                 latitude = latd.d;
                 longitude = longd.d;
 
+                longt = longitude;
+                latt = latitude;
+
+                Log.println(Log.DEBUG, "tg", "long ${longitude}, lat ${latitude}");
                 val gc : GregorianCalendar = GregorianCalendar();
                 gc.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY);
 
@@ -825,6 +861,8 @@ class focus_main : AppCompatActivity() {
                 with(url.openConnection() as HttpsURLConnection)
                 {
                     setRequestProperty("User-Agent", "curl/7.81.0");
+                    val _t = responseCode;
+                    Log.println(Log.DEBUG, "lg", "code $_t for forecast");
                     val reader = getInputStream().bufferedReader();
                     var line: String = reader.readText();
                     sb.append(line);
@@ -877,6 +915,28 @@ class focus_main : AppCompatActivity() {
             return;
 
         runOnUiThread{
+
+            var url_target = "https://focus.barton.ac.uk";
+            val s : String = CookieManager.getInstance().getCookie(url_target);
+            val sa = s.split("; ");
+
+            for(i in 0 until sa.size)
+            {
+                val str = sa[i];
+
+                val arr_eq = str.split("=");
+                val cn = arr_eq[0];
+                val cv = arr_eq.stream().skip(1).collect(Collectors.joining("="));
+
+                if(cn != "focus_session")
+                    continue;
+
+                val sc = "$cn=$cv; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax";
+                //Log.println(Log.DEBUG, "sc", "$sc");
+                CookieManager.getInstance().setCookie(url_target, sc);
+            }
+            //Log.println(Log.DEBUG, "cookie", s);
+            CookieManager.getInstance().flush();
 
             web_view!!.webViewClient = WebViewClient();
             val d = findViewById<ConstraintLayout>(R.id.main)
@@ -988,6 +1048,9 @@ class focus_main : AppCompatActivity() {
 
         var url_target = "https://focus.barton.ac.uk";
 
+        CookieManager.getInstance().setAcceptCookie(true);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(web_view!!, true);
+
         web_view!!.addJavascriptInterface(focus_inject(this), "AndroidFocusInjection");
 
         web_view!!.webViewClient = object : WebViewClient()
@@ -1043,7 +1106,7 @@ class focus_main : AppCompatActivity() {
     fun continue_cache()
     {
         runOnUiThread {
-            update_weather_day();
+            //update_weather_day();
             var tview = findViewById<TextView>(R.id.view7);
             var button2 = findViewById<Button>(R.id.button2);
             var button1 = findViewById<Button>(R.id.button);
@@ -1175,6 +1238,7 @@ class focus_main : AppCompatActivity() {
     }
     fun load_cache(week: week_cached?) : Boolean
     {
+        //Log.println(Log.DEBUG, "tag", "week: $week");
         if(week == null) {
             load_webview();
             return false;
@@ -1183,7 +1247,7 @@ class focus_main : AppCompatActivity() {
 
         for(i in 0 until 6)
         {
-            days[i] = timetable_day(i);
+            days[i] = timetable_day(nulltimetable_day!!, i);
         }
         val len = min(week.week_days.day_list.size, 6);
         for(i in 0 until len)
@@ -1207,10 +1271,20 @@ class focus_main : AppCompatActivity() {
         var week_id = gcur.get(Calendar.WEEK_OF_YEAR);
         if(gcur.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY && firstDayInt == Calendar.SUNDAY)
             week_id--;
+
+        var week_day = gcur.get(Calendar.DAY_OF_YEAR);
+        var hour_m = gcur.get(Calendar.HOUR_OF_DAY);
+        var minu = gcur.get(Calendar.MINUTE);
+
+        if(hour_m < 8 || (hour_m == 8 && minu <= 45))
+            week_day--;
+
         var has_data = false;
+        //Log.println(Log.DEBUG, "tagg", cache_view?.all_weeks?.value!!.joinToString());
         cache_view?.all_weeks?.observe(this) {
-            caches_week -> has_data = load_cache(caches_week.find {
-                it.week_id == week_id
+            caches_week ->
+            has_data = load_cache(caches_week.find {
+                it.week_id == week_id;
             })
         };
         //if(has_data)
