@@ -13,9 +13,12 @@ A fully functional app running purely in one python file.
 
 
 ## Focus Finder on Android
-An Android app which supports fetching timetable data,
+An Android app to display your Focus timetable
 
-And then caching it for the entire week.
+It supports
+* Fetching this weeks timetable data
+* Sharing your timetable to your friends
+* Telling you the weather
 
 It is written in Kotlin.
 
