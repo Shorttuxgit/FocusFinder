@@ -1688,9 +1688,7 @@ class focus_main : AppCompatActivity() {
 
         var cache_save = week_cached(week_id, friend.day_time, friend.person_name, false, wlist);
 
-        try {
-            cache_view?.all_weeks?.removeObserver(cache_observer);
-        }catch(e : Exception) {}
+        unloaded.set(false);
         cache_view?.delete_of(friend.person_name);
         cache_view?.insert(cache_save);
     }
