@@ -18,6 +18,7 @@ An Android app to display your Focus timetable
 It supports
 * Fetching this weeks timetable data
 * Sharing your timetable to your friends
+* Telling you whether you share any free periods with your friends
 * Telling you the weather
 
 It is written in Kotlin.
