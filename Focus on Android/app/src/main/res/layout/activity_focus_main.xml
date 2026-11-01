@@ -162,6 +162,7 @@
                 android:background="@color/separator" />
 
             <LinearLayout
+                android:id="@+id/l1"
                 android:layout_width="match_parent"
                 android:layout_height="121dp"
                 android:layout_weight="0.5"
@@ -204,19 +205,33 @@
 
                 </LinearLayout>
 
-                <TextView
-                    android:id="@+id/v1title"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:layout_marginLeft="25dp"
-                    android:layout_marginTop="0dp"
-                    android:layout_marginRight="10dp"
                     android:layout_weight="0.5"
-                    android:gravity="center"
-                    android:paddingRight="5dp"
-                    android:text="View1"
-                    android:textAlignment="center"
-                    android:textSize="24dp" />
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/v1title"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_marginLeft="25dp"
+                        android:layout_marginTop="0dp"
+                        android:layout_marginRight="10dp"
+                        android:layout_weight="0.1"
+                        android:gravity="center"
+                        android:paddingRight="5dp"
+                        android:text="View1"
+                        android:textAlignment="center"
+                        android:textSize="24dp" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/rec1"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_weight="0.2" />
+
+                </LinearLayout>
 
             </LinearLayout>
 
@@ -227,6 +242,7 @@
                 android:background="@color/separator" />
 
             <LinearLayout
+                android:id="@+id/l2"
                 android:layout_width="match_parent"
                 android:layout_height="121dp"
                 android:orientation="horizontal">
@@ -267,19 +283,33 @@
 
                 </LinearLayout>
 
-                <TextView
-                    android:id="@+id/v2title"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:layout_marginLeft="25dp"
-                    android:layout_marginTop="0dp"
-                    android:layout_marginRight="10dp"
                     android:layout_weight="0.5"
-                    android:gravity="center"
-                    android:paddingRight="5dp"
-                    android:text="View1"
-                    android:textAlignment="center"
-                    android:textSize="24dp" />
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/v2title"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_marginLeft="25dp"
+                        android:layout_marginTop="0dp"
+                        android:layout_marginRight="10dp"
+                        android:layout_weight="0.1"
+                        android:gravity="center"
+                        android:paddingRight="5dp"
+                        android:text="View1"
+                        android:textAlignment="center"
+                        android:textSize="24dp" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/rec2"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_weight="0.2" />
+                </LinearLayout>
+
             </LinearLayout>
 
             <View
@@ -289,6 +319,7 @@
                 android:background="@color/separator" />
 
             <LinearLayout
+                android:id="@+id/l3"
                 android:layout_width="match_parent"
                 android:layout_height="121dp"
                 android:orientation="horizontal">
@@ -328,19 +359,33 @@
                         android:textSize="16dp" />
                 </LinearLayout>
 
-                <TextView
-                    android:id="@+id/v3title"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:layout_marginLeft="25dp"
-                    android:layout_marginTop="0dp"
-                    android:layout_marginRight="10dp"
                     android:layout_weight="0.5"
-                    android:gravity="center"
-                    android:paddingRight="5dp"
-                    android:text="View1"
-                    android:textAlignment="center"
-                    android:textSize="24dp" />
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/v3title"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_marginLeft="25dp"
+                        android:layout_marginTop="0dp"
+                        android:layout_marginRight="10dp"
+                        android:layout_weight="0.1"
+                        android:gravity="center"
+                        android:paddingRight="5dp"
+                        android:text="View1"
+                        android:textAlignment="center"
+                        android:textSize="24dp" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/rec3"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_weight="0.2" />
+                </LinearLayout>
+
             </LinearLayout>
 
             <View
@@ -350,6 +395,7 @@
                 android:background="@color/separator" />
 
             <LinearLayout
+                android:id="@+id/l4"
                 android:layout_width="match_parent"
                 android:layout_height="121dp"
                 android:orientation="horizontal">
@@ -389,19 +435,34 @@
                         android:textSize="16dp" />
                 </LinearLayout>
 
-                <TextView
-                    android:id="@+id/v4title"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:layout_marginLeft="25dp"
-                    android:layout_marginTop="0dp"
-                    android:layout_marginRight="10dp"
                     android:layout_weight="0.5"
-                    android:gravity="center"
-                    android:paddingRight="5dp"
-                    android:text="View1"
-                    android:textAlignment="center"
-                    android:textSize="24dp" />
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/v4title"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_marginLeft="25dp"
+                        android:layout_marginTop="0dp"
+                        android:layout_marginRight="10dp"
+                        android:layout_weight="0.1"
+                        android:gravity="center"
+                        android:paddingRight="5dp"
+                        android:text="View1"
+                        android:textAlignment="center"
+                        android:textSize="24dp" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/rec4"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_weight="0.2" >
+
+                    </androidx.recyclerview.widget.RecyclerView>
+                </LinearLayout>
 
             </LinearLayout>
 

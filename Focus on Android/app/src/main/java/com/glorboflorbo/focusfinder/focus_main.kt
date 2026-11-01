@@ -3,7 +3,6 @@ package com.glorboflorbo.focusfinder
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Application
-import android.app.ComponentCaller
 import android.content.ClipData
 import android.content.ContentProvider
 import android.content.ContentValues
@@ -15,8 +14,7 @@ import android.content.res.AssetFileDescriptor
 import android.database.Cursor
 import android.database.MatrixCursor
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.drawable.BitmapDrawable
+import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.PictureDrawable
 import android.location.Location
@@ -29,16 +27,20 @@ import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import android.util.Log
 import android.view.GestureDetector
+import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.AdapterView
+import android.widget.AdapterView.OnItemSelectedListener
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
@@ -51,8 +53,12 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
+import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.recyclerview.widget.DividerItemDecoration
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
@@ -65,11 +71,11 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
+import androidx.room.concurrent.AtomicBoolean
 import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat
 import com.caverock.androidsvg.SVG
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
-import com.google.android.material.navigation.NavigationBarView
 import com.google.gson.Gson
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -94,9 +100,6 @@ import java.util.zip.GZIPOutputStream
 import javax.net.ssl.HttpsURLConnection
 import kotlin.concurrent.thread
 import kotlin.math.abs
-import android.widget.AdapterView.OnItemSelectedListener;
-import androidx.lifecycle.Observer
-import androidx.room.concurrent.AtomicBoolean
 
 class timetable_event
 {
@@ -357,22 +360,75 @@ class week_view(application: Application) : AndroidViewModel(application)
         caches.delete_of(name);
     }
 }
+class timetable_adapter : RecyclerView.Adapter<timetable_adapter.ViewHolder>
+{
+    var infl : LayoutInflater;
+    var ctx : Context;
+    var list : ArrayList<String> = ArrayList<String>();
+    constructor(c : Context)
+    {
+        ctx = c;
+        infl = LayoutInflater.from(ctx);
+    }
 
+    override fun onCreateViewHolder(
+        parent: ViewGroup,
+        viewType: Int
+    ): ViewHolder {
+        val vw = infl.inflate(R.layout.string_layout, parent, false);
+        return ViewHolder(vw);
+    }
+
+    override fun onBindViewHolder(
+        holder: ViewHolder,
+        position: Int
+    ) {
+        val animal: String = list[position] + " has Free";
+        holder.tv.text = animal;
+    }
+
+    override fun getItemCount(): Int {
+        return list.size;
+    }
+    fun getItem(id: Int): String {
+        return list[id] + " has Free";
+    }
+
+    inner class ViewHolder : RecyclerView.ViewHolder {
+        val tv : TextView;
+
+        constructor(iv : View) : super(iv) {
+            tv = iv.findViewById<TextView>(R.id.text_str);
+        }
+    }
+
+}
 class timetable_view
 {
     var vtitle : TextView;
     var vroom : TextView;
     var vtime : TextView;
     var vstaff : TextView;
+    var layout : LinearLayout;
+    var rec : RecyclerView;
+    var adapt : timetable_adapter;
     var sdfmt : SimpleDateFormat = SimpleDateFormat("HH:mm");
-    constructor(vt : TextView, vr : TextView, vs : TextView, vtl : TextView)
+    constructor(vt : TextView, vr : TextView, vs : TextView, vtl : TextView, l : LinearLayout, r : RecyclerView)
     {
         vstaff = vs;
         vtitle = vtl;
         vroom = vr;
         vtime = vt;
+        layout = l;
+        rec = r;
+        adapt = timetable_adapter(rec.context);
+        var ly : LinearLayoutManager = LinearLayoutManager(rec.context);
+        rec.layoutManager = ly;
+        val did = DividerItemDecoration(rec.context, ly.getOrientation());
+        rec.addItemDecoration(did);
+        rec.adapter = adapt;
     }
-    fun set_info(ev: timetable_event)
+    fun set_info(ev: timetable_event, s : ArrayList<String>)
     {
         var str_b = sdfmt.format(ev.time_start.getTime());
         var str_a = sdfmt.format(ev.time_end.getTime());
@@ -383,6 +439,28 @@ class timetable_view
         vroom.text = "room: ${ev.room}";
         vtitle.text = "${ev.title}";
         vstaff.text = "staff: ${ev.staff}";
+
+        if(ev.title == "Study Period" || ev.title == "Personal Development")
+            layout.setBackgroundColor(Color.argb(0xFF, 0x16, 0x16, 0x0D));
+        else
+            layout.setBackgroundColor(Color.TRANSPARENT);
+
+        if(ev.title == "Study Period" || ev.title == "Personal Development")
+        {
+            adapt.list.clear();
+            adapt.list.addAll(s);
+
+            Log.println(Log.DEBUG, "ma", "list $s, ${s.size}");
+
+            adapt.notifyDataSetChanged();
+        }
+        else
+        {
+            val ln = adapt.list.count();
+            adapt.list.clear();
+            if(ln>0)
+                adapt.notifyItemRangeRemoved(0, ln);
+        }
     }
 }
 class focus_inject
@@ -690,11 +768,40 @@ class focus_main : AppCompatActivity() {
             if (hour_m < 8 || (hour_m == 8 && minu <= 45))
                 week_day--;
 
+            var tc : week_cached? = null;
             var t: Boolean =
-                week_caches.filter { it.week_id == week_id }.map { load_cache(it, it.is_main) }
+                week_caches.filter { it.week_id == week_id }.map { if (load_cache(it, it.is_main)) {tc = it; true;} else false; }
                     .any { it };
             if (!t)
                 load_webview();
+            else if(tc != null)
+            {
+                init_login();
+                val week = tc;
+                self_person = true;
+                person_name = week.name;
+                cur_selced = -1;
+                val udate = date;
+                date = GregorianCalendar();
+                date.timeInMillis = week.day_cached*24*60*60*1000;
+                date.set(Calendar.DAY_OF_WEEK, udate.get(Calendar.DAY_OF_WEEK));
+
+                for(i in 0 until 6)
+                {
+                    days[i] = timetable_day(nulltimetable_day!!, i);
+                }
+                val len = min(week.week_days.day_list.size, 6);
+                for(i in 0 until len)
+                {
+                    val week = week.week_days.day_list[i];
+
+                    Log.println(Log.DEBUG, "dbgp", "${week.week_day_data}")
+
+                    days[week.week_day]?.interpret(week.week_day_data);
+                }
+
+                load_weather(::continue_cache);
+            }
         }
     }
     fun update_texts()
@@ -708,8 +815,27 @@ class focus_main : AppCompatActivity() {
 
         for(i in 0..3)
         {
+            val s : ArrayList<String> = ArrayList();
             Log.println(Log.DEBUG, "dbg", "$i has ${views[i]} with day ${day}");
-            views[i]?.set_info(day?.events[i]!!);
+            for(j in 0 until friends.size)
+            {
+                if(d<0)
+                    break;
+                if(day?.events[i]!!.title != "Study Period" && day.events[i]!!.title != "Personal Development")
+                    break;
+                var gc : GregorianCalendar = GregorianCalendar();
+                gc.timeInMillis = friends[j].day_time*24*60*60*1000;
+                gc.set(Calendar.DAY_OF_WEEK, date.get(Calendar.DAY_OF_WEEK));
+                var dt : GregorianCalendar = GregorianCalendar();
+                dt.timeInMillis = (date.timeInMillis/1000/60/60/24) * 24*60*60*1000;
+                //Log.println(Log.DEBUG, "ttt", "${dt.timeInMillis} ?= ${gc.timeInMillis}");
+                if(gc.timeInMillis != dt.timeInMillis)
+                    continue;
+                var dy : timetable_day = friends[j].days[d]!!;
+                if(dy.events[i]!!.title == "Study Period" || dy.events[i]!!.title == "Personal Development")
+                    s += friends[j].person_name;
+            }
+            views[i]?.set_info(day?.events[i]!!, s);
         }
         update_weather_day();
     }
@@ -881,6 +1007,9 @@ class focus_main : AppCompatActivity() {
 
         cur_selced = -1;
         cache_view?.clear_all();
+        val udate = date;
+        date = days[0]!!.events[0]!!.time_start;
+        date.set(Calendar.DAY_OF_WEEK, udate.get(Calendar.DAY_OF_WEEK));
 
         val g : GregorianCalendar = GregorianCalendar();
         var wlist : week_day_list = week_day_list(emptyList());
@@ -891,7 +1020,7 @@ class focus_main : AppCompatActivity() {
             wlist.day_list = wlist.day_list + wd;
         }
 
-        var day = g.timeInMillis / 1000 / 60 / 60 / 24;
+        var day = date.timeInMillis / 1000 / 60 / 60 / 24;
         var hour_m = g.get(Calendar.HOUR_OF_DAY);
         var minu = g.get(Calendar.MINUTE);
 
@@ -1418,10 +1547,10 @@ class focus_main : AppCompatActivity() {
 
         //Log.println(Log.DEBUG, "tagx", "${sdfmt1.format(date.time)}");
 
-        views[0] = timetable_view(findViewById<TextView>(R.id.v1time), findViewById<TextView>(R.id.v1room), findViewById<TextView>(R.id.v1staff), findViewById<TextView>(R.id.v1title));
-        views[1] = timetable_view(findViewById<TextView>(R.id.v2time), findViewById<TextView>(R.id.v2room), findViewById<TextView>(R.id.v2staff), findViewById<TextView>(R.id.v2title));
-        views[2] = timetable_view(findViewById<TextView>(R.id.v3time), findViewById<TextView>(R.id.v3room), findViewById<TextView>(R.id.v3staff), findViewById<TextView>(R.id.v3title));
-        views[3] = timetable_view(findViewById<TextView>(R.id.v4time), findViewById<TextView>(R.id.v4room), findViewById<TextView>(R.id.v4staff), findViewById<TextView>(R.id.v4title));
+        views[0] = timetable_view(findViewById<TextView>(R.id.v1time), findViewById<TextView>(R.id.v1room), findViewById<TextView>(R.id.v1staff), findViewById<TextView>(R.id.v1title), findViewById<LinearLayout>(R.id.l1), findViewById<RecyclerView>(R.id.rec1));
+        views[1] = timetable_view(findViewById<TextView>(R.id.v2time), findViewById<TextView>(R.id.v2room), findViewById<TextView>(R.id.v2staff), findViewById<TextView>(R.id.v2title), findViewById<LinearLayout>(R.id.l2), findViewById<RecyclerView>(R.id.rec2));
+        views[2] = timetable_view(findViewById<TextView>(R.id.v3time), findViewById<TextView>(R.id.v3room), findViewById<TextView>(R.id.v3staff), findViewById<TextView>(R.id.v3title), findViewById<LinearLayout>(R.id.l3), findViewById<RecyclerView>(R.id.rec3));
+        views[3] = timetable_view(findViewById<TextView>(R.id.v4time), findViewById<TextView>(R.id.v4room), findViewById<TextView>(R.id.v4staff), findViewById<TextView>(R.id.v4title), findViewById<LinearLayout>(R.id.l4), findViewById<RecyclerView>(R.id.rec4));
         init_nullt();
     }
     fun finish_login()
@@ -1884,26 +2013,6 @@ class focus_main : AppCompatActivity() {
             friends.add(friend);
             return false;
         }
-        init_login();
-        self_person = true;
-        person_name = week.name;
-        cur_selced = -1;
-
-        for(i in 0 until 6)
-        {
-            days[i] = timetable_day(nulltimetable_day!!, i);
-        }
-        val len = min(week.week_days.day_list.size, 6);
-        for(i in 0 until len)
-        {
-            val week = week.week_days.day_list[i];
-
-            Log.println(Log.DEBUG, "dbgp", "${week.week_day_data}")
-
-            days[week.week_day]?.interpret(week.week_day_data);
-        }
-
-        load_weather(::continue_cache);
         return true;
     }
     fun do_login()

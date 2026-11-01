@@ -34,6 +34,7 @@ android {
 }
 
 dependencies {
+    implementation(libs.androidx.recyclerview)
     implementation(libs.gson);
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.appcompat)
