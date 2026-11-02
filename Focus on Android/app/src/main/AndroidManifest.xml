@@ -15,6 +15,12 @@
         android:supportsRtl="true"
 
         android:theme="@style/Theme.FocusFinder">
+        <provider
+            android:name=".focus_copy"
+            android:authorities="com.glorboflorbo.focusfinder"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            />
         <activity
             android:launchMode="singleTask"
             android:screenOrientation="portrait"
@@ -23,10 +29,24 @@
 
             android:windowSoftInputMode="adjustResize">
 
-        <intent-filter>
-            <action android:name="android.intent.action.MAIN"/>
-            <category android:name="android.intent.category.LAUNCHER"/>
-        </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
 
     </activity>
         <activity
