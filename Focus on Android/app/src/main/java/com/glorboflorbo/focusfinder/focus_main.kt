@@ -306,7 +306,7 @@ interface week_dao
     suspend fun delete_of(name : String);
 }
 @TypeConverters(value = [week_list_converter::class])
-@Database(entities = [week_cached::class], version = 5, exportSchema = false)
+@Database(entities = [week_cached::class], version = 6, exportSchema = false)
 abstract class week_database : RoomDatabase()
 {
     abstract fun get_week_dao() : week_dao;
@@ -441,7 +441,7 @@ class timetable_view
         vstaff.text = "staff: ${ev.staff}";
 
         if(ev.title == "Study Period" || ev.title == "Personal Development")
-            layout.setBackgroundColor(Color.argb(0xFF, 0x16, 0x16, 0x0D));
+            layout.setBackgroundColor(Color.argb(0xFF, 0x1E, 0x20, 0x04));
         else
             layout.setBackgroundColor(Color.TRANSPARENT);
 
@@ -765,8 +765,8 @@ class focus_main : AppCompatActivity() {
             var hour_m = gcur.get(Calendar.HOUR_OF_DAY);
             var minu = gcur.get(Calendar.MINUTE);
 
-            if (hour_m < 8 || (hour_m == 8 && minu <= 45))
-                week_day--;
+            //if (hour_m < 8 || (hour_m == 8 && minu <= 45))
+            //    week_day--;
 
             var tc : week_cached? = null;
             var t: Boolean =
@@ -1024,8 +1024,8 @@ class focus_main : AppCompatActivity() {
         var hour_m = g.get(Calendar.HOUR_OF_DAY);
         var minu = g.get(Calendar.MINUTE);
 
-        if(hour_m < 8 || (hour_m == 8 && minu <= 45))
-            day--;
+        //if(hour_m < 8 || (hour_m == 8 && minu <= 45))
+        //    day--;
         var week_id = g.get(Calendar.WEEK_OF_YEAR);
         val calendar = Calendar.getInstance(Locale.getDefault())
         val firstDayInt = calendar.getFirstDayOfWeek()
@@ -1048,6 +1048,7 @@ class focus_main : AppCompatActivity() {
             val shareb = findViewById<Button>(R.id.share);
             var scv = findViewById<ScrollView>(R.id.scroll_view);
             var dm = date.get(Calendar.DAY_OF_MONTH);
+            var rref = findViewById<Button>(R.id.share2);
             var spn = findViewById<Spinner>(R.id.spinner);
             spn.setSelection(cur_selced+1);
             val items : Array<String> = Array<String>(friends.size+1, {
@@ -1090,6 +1091,11 @@ class focus_main : AppCompatActivity() {
             shareb.setCompoundDrawablesWithIntrinsicBounds(android.R.drawable.ic_menu_share, 0, 0, 0);
             shareb.setOnClickListener {
                 do_share();
+            }
+            rref.setOnClickListener {
+                cache_view?.clear_all();
+                friends.clear();
+                do_login();
             }
             button2.setOnClickListener {
                 if(date.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
@@ -1508,10 +1514,10 @@ class focus_main : AppCompatActivity() {
             web_view!!.clearCache(true);
             web_view!!.loadUrl("about:blank");
             web_view!!.onPause();
-            web_view!!.removeAllViews();
-            web_view!!.destroyDrawingCache();
+            //web_view!!.removeAllViews();
+            //web_view!!.destroyDrawingCache();
             web_view!!.pauseTimers();
-            web_view!!.destroy();
+            //web_view!!.destroy();
 
             self_person = true;
 
@@ -1708,6 +1714,7 @@ class focus_main : AppCompatActivity() {
             var dm = date.get(Calendar.DAY_OF_MONTH);
             var scv = findViewById<ScrollView>(R.id.scroll_view);
             var spn = findViewById<Spinner>(R.id.spinner);
+            var rref = findViewById<Button>(R.id.share2);
             val items : Array<String> = Array<String>(friends.size+1, {
                 if(it == 0)
                     "Your timetable";
@@ -1745,6 +1752,11 @@ class focus_main : AppCompatActivity() {
                 sdfmt = sdfmt4;
             val s = sdfmt.format(date.getTime());
             tview.text = s;
+            rref.setOnClickListener {
+                cache_view?.clear_all();
+                friends.clear();
+                do_login();
+            }
             button2.setOnClickListener {
                 if (date.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
                     date.add(Calendar.DATE, -1);
@@ -1981,8 +1993,8 @@ class focus_main : AppCompatActivity() {
             var hour_m = greg.get(Calendar.HOUR_OF_DAY);
             var minu = greg.get(Calendar.MINUTE);
 
-            if(hour_m < 8 || (hour_m == 8 && minu <= 45))
-                day--;
+            //if(hour_m < 8 || (hour_m == 8 && minu <= 45))
+            //    day--;
 
             val tf = timetable_friend(name_fr, week_id, day);
             for(i in 0 until 6)
@@ -2027,8 +2039,8 @@ class focus_main : AppCompatActivity() {
         var hour_m = gcur.get(Calendar.HOUR_OF_DAY);
         var minu = gcur.get(Calendar.MINUTE);
 
-        if(hour_m < 8 || (hour_m == 8 && minu <= 45))
-            week_day--;
+        //if(hour_m < 8 || (hour_m == 8 && minu <= 45))
+        //    week_day--;
 
         cur_selced = -1;
         Log.println(Log.DEBUG, "mm", "${Log.getStackTraceString(Throwable())}");
