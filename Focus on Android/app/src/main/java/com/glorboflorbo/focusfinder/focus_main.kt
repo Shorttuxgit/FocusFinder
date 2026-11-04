@@ -8,6 +8,7 @@ import android.content.ContentProvider
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.UriMatcher
 import android.content.pm.PackageManager
 import android.content.res.AssetFileDescriptor
@@ -39,6 +40,7 @@ import android.widget.AdapterView
 import android.widget.AdapterView.OnItemSelectedListener
 import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -748,6 +750,9 @@ class focus_main : AppCompatActivity() {
     var friends = ArrayList<timetable_friend>();
     var cur_selced = -1;
     var unloaded : AtomicBoolean = AtomicBoolean(true);
+    var shared_prefs : SharedPreferences? = null;
+    var weather : Boolean = true;
+    var hide_friends : Boolean = false;
     val cache_observer : Observer<List<week_cached>> = Observer<List<week_cached>> { week_caches ->
 
         if(unloaded.getAndSet(false)) {
@@ -819,6 +824,8 @@ class focus_main : AppCompatActivity() {
             Log.println(Log.DEBUG, "dbg", "$i has ${views[i]} with day ${day}");
             for(j in 0 until friends.size)
             {
+                if(hide_friends)
+                    break;
                 if(d<0)
                     break;
                 if(day?.events[i]!!.title != "Study Period" && day.events[i]!!.title != "Personal Development")
@@ -845,13 +852,19 @@ class focus_main : AppCompatActivity() {
         if(d < 0)
             d = 6;
         var weekd = wdays[d];
-        if(weekd == null)
+        if(weekd == null || !weather) {
+            var iview = findViewById<ImageView>(R.id.imageView);
+            iview.visibility = View.GONE;
+            var weahter = findViewById<TextView>(R.id.weahter);
+            weahter.visibility = View.GONE;
             return;
+        }
         //if(weekd.is_raining() || !weekd.is_day)
         //    AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
         //else
         //    AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
         var weahter = findViewById<TextView>(R.id.weahter);
+        weahter.visibility = View.VISIBLE;
         var sst : String = "";
         if(weekd.today) {
             if (weekd.is_raining())
@@ -866,6 +879,7 @@ class focus_main : AppCompatActivity() {
         sst += String.format(" (${weekd.min_temp}°C - ${weekd.max_temp}°C) at %.1f,%.1f", latt, longt);
         weahter.text = sst;
         var iview = findViewById<ImageView>(R.id.imageView);
+        iview.visibility = View.VISIBLE;
         iview.setImageDrawable(weekd.wdraw);
     }
     fun decompress_94(event: String) : String
@@ -946,7 +960,245 @@ class focus_main : AppCompatActivity() {
         Log.println(Log.DEBUG, "tg", "compressed day:   ${output}");
         Log.println(Log.DEBUG, "tg", "uncompressed day: ${final.toString()}");
     }
+    fun settings_update()
+    {
+        val exb = findViewById<Button>(R.id.share3);
+        exb.setOnClickListener {
+            init_login_nt();
+            ui_timetable();
+        }
+        val sh4 = findViewById<Button>(R.id.share4);
+        sh4.setOnClickListener {
+            cache_view?.clear_all();
+            do_login();
+        }
+        val wbox = findViewById<CheckBox>(R.id.weather_box);
+        wbox.isChecked = weather;
+        wbox.setOnClickListener {
+            val isc = wbox.isChecked;
+            with(shared_prefs?.edit()!!)
+            {
+                putBoolean("weather_enabled", isc);
+                apply();
+            }
+            weather = isc;
+        }
+
+        val fbox = findViewById<CheckBox>(R.id.checkBox2);
+        fbox.isChecked = hide_friends;
+        fbox.setOnClickListener {
+            val isc = fbox.isChecked;
+            with(shared_prefs?.edit()!!)
+            {
+                putBoolean("hide_friends", isc);
+                apply();
+            }
+            hide_friends = isc;
+        }
+    }
     @SuppressLint("ClickableViewAccessibility")
+    fun ui_timetable()
+    {
+        runOnUiThread {
+            val tself = findViewById<TextView>(R.id.person);
+            if(self_person)
+                tself.text = "Your Timetable";
+            else
+                tself.text = "$person_name's Timetable";
+            val tview = findViewById<TextView>(R.id.view7);
+            val button2 = findViewById<Button>(R.id.button2);
+            val button1 = findViewById<Button>(R.id.button);
+            val button3 = findViewById<Button>(R.id.button3);
+            var shareb = findViewById<Button>(R.id.share);
+            var scv = findViewById<ScrollView>(R.id.scroll_view);
+            var dm = date.get(Calendar.DAY_OF_MONTH);
+            var rref = findViewById<Button>(R.id.share2);
+            var spn = findViewById<Spinner>(R.id.spinner);
+            var vsp = findViewById<LinearLayout>(R.id.wther);
+            spn.setSelection(cur_selced+1);
+            if(hide_friends)
+                spn.visibility = View.GONE;
+            else
+                spn.visibility = View.VISIBLE;
+
+            if(hide_friends && !weather)
+                vsp.visibility = View.GONE;
+            else
+                vsp.visibility = View.VISIBLE;
+
+            val items : Array<String> = Array<String>(friends.size+1, {
+                if(it == 0)
+                    "Your timetable";
+                else
+                    "${friends[it-1].person_name!!}'s timetable";
+            });
+            var aa = ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, items);
+            spn.adapter = aa;
+            spn.post {
+                spn.onItemSelectedListener = object : OnItemSelectedListener {
+                    override fun onItemSelected(parent: AdapterView<*>?, selc: View?, pos: Int, id: Long) {
+                        if((pos-1) == cur_selced)
+                            return;
+                        if(pos == 0)
+                            do_login();
+                        else
+                            load_friend_table(friends[pos-1]);
+                        Log.println(Log.DEBUG, "tga", "pos: $pos");
+                    }
+
+                    override fun onNothingSelected(parent: AdapterView<*>?) {
+                        return;
+                    }
+                }
+                spn.setSelection(cur_selced+1);
+            }
+            var sdfmt = when (dm % 10) {
+                1 -> sdfmt1;
+                2 -> sdfmt2;
+                3 -> sdfmt3;
+                else -> {
+                    sdfmt4; }
+            }
+            if (dm >= 11 && dm <= 13)
+                sdfmt = sdfmt4;
+            val s = sdfmt.format(date.getTime());
+            tview.text = s;
+            if(cur_selced < 0)
+            {
+                shareb.setCompoundDrawablesWithIntrinsicBounds(android.R.drawable.ic_menu_share, 0, 0, 0);
+                shareb.setOnClickListener {
+                    do_share();
+                }
+            }
+            else
+            {
+                shareb.setOnClickListener {
+                    do_login();
+                }
+                shareb.setCompoundDrawablesWithIntrinsicBounds(android.R.drawable.ic_menu_close_clear_cancel, 0, 0, 0);
+            }
+            rref.setOnClickListener {
+                setContentView(R.layout.activity_settings);
+                settings_update();
+            }
+            //rref.setOnClickListener {
+            //    cache_view?.clear_all();
+            //    friends.clear();
+            //    do_login();
+            //}
+            button2.setOnClickListener {
+                if (date.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
+                    date.add(Calendar.DATE, -1);
+                    var dm = date.get(Calendar.DAY_OF_MONTH);
+                    var sdfmt = when (dm % 10) {
+                        1 -> sdfmt1;
+                        2 -> sdfmt2;
+                        3 -> sdfmt3;
+                        else -> {
+                            sdfmt4; }
+                    }
+                    if (dm >= 11 && dm <= 13)
+                        sdfmt = sdfmt4;
+                    val s = sdfmt.format(date.getTime());
+                    tview.text = s;
+                    update_texts();
+                }
+            }
+            button1.setOnClickListener {
+                if (date.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
+                    date.add(Calendar.DATE, 1);
+                    var dm = date.get(Calendar.DAY_OF_MONTH);
+                    var sdfmt = when (dm % 10) {
+                        1 -> sdfmt1;
+                        2 -> sdfmt2;
+                        3 -> sdfmt3;
+                        else -> {
+                            sdfmt4; }
+                    }
+                    if (dm >= 11 && dm <= 13)
+                        sdfmt = sdfmt4;
+                    val s = sdfmt.format(date.getTime());
+                    tview.text = s;
+                    update_texts();
+                }
+            }
+            button3.setOnClickListener {
+                val tst = GregorianCalendar();
+                date.set(Calendar.DAY_OF_WEEK, tst.get(Calendar.DAY_OF_WEEK));
+                var dm = date.get(Calendar.DAY_OF_MONTH);
+                var sdfmt = when (dm % 10) {
+                    1 -> sdfmt1;
+                    2 -> sdfmt2;
+                    3 -> sdfmt3;
+                    else -> {
+                        sdfmt4; }
+                }
+                if (dm >= 11 && dm <= 13)
+                    sdfmt = sdfmt4;
+                val s = sdfmt.format(date.getTime());
+                tview.text = s;
+                update_texts();
+            }
+            scv.setOnTouchListener(object : gesture_swipe(this) {
+                override fun onSwipeRight() {
+                    if (date.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
+                        date.add(Calendar.DATE, -1);
+                        var dm = date.get(Calendar.DAY_OF_MONTH);
+                        var sdfmt = when (dm % 10) {
+                            1 -> sdfmt1;
+                            2 -> sdfmt2;
+                            3 -> sdfmt3;
+                            else -> {
+                                sdfmt4; }
+                        }
+                        if (dm >= 11 && dm <= 13)
+                            sdfmt = sdfmt4;
+                        val s = sdfmt.format(date.getTime());
+                        tview.text = s;
+                        update_texts();
+                    }
+                }
+
+                override fun onDoubleClick() {
+                    val tst = GregorianCalendar();
+                    date.set(Calendar.DAY_OF_WEEK, tst.get(Calendar.DAY_OF_WEEK));
+                    var dm = date.get(Calendar.DAY_OF_MONTH);
+                    var sdfmt = when (dm % 10) {
+                        1 -> sdfmt1;
+                        2 -> sdfmt2;
+                        3 -> sdfmt3;
+                        else -> {
+                            sdfmt4; }
+                    }
+                    if (dm >= 11 && dm <= 13)
+                        sdfmt = sdfmt4;
+                    val s = sdfmt.format(date.getTime());
+                    tview.text = s;
+                    update_texts();
+                }
+
+                override fun onSwipeLeft() {
+                    if (date.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
+                        date.add(Calendar.DATE, 1);
+                        var dm = date.get(Calendar.DAY_OF_MONTH);
+                        var sdfmt = when (dm % 10) {
+                            1 -> sdfmt1;
+                            2 -> sdfmt2;
+                            3 -> sdfmt3;
+                            else -> {
+                                sdfmt4; }
+                        }
+                        if (dm >= 11 && dm <= 13)
+                            sdfmt = sdfmt4;
+                        val s = sdfmt.format(date.getTime());
+                        tview.text = s;
+                        update_texts();
+                    }
+                }
+            })
+            update_texts();
+        }
+    }
     fun update_timetable(events: JSONArray)
     {
         for(i in 0 until 6)
@@ -1035,181 +1287,7 @@ class focus_main : AppCompatActivity() {
 
         cache_view?.insert(cache_save);
 
-        runOnUiThread {
-            val tself = findViewById<TextView>(R.id.person);
-            if(self_person)
-                tself.text = "Your Timetable";
-            else
-                tself.text = "$person_name's Timetable";
-            val tview = findViewById<TextView>(R.id.view7);
-            val button2 = findViewById<Button>(R.id.button2);
-            val button1 = findViewById<Button>(R.id.button);
-            val button3 = findViewById<Button>(R.id.button3);
-            val shareb = findViewById<Button>(R.id.share);
-            var scv = findViewById<ScrollView>(R.id.scroll_view);
-            var dm = date.get(Calendar.DAY_OF_MONTH);
-            var rref = findViewById<Button>(R.id.share2);
-            var spn = findViewById<Spinner>(R.id.spinner);
-            spn.setSelection(cur_selced+1);
-            val items : Array<String> = Array<String>(friends.size+1, {
-                if(it == 0)
-                    "Your timetable";
-                else
-                    "${friends[it-1].person_name!!}'s timetable";
-            });
-            var aa = ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, items);
-            spn.adapter = aa;
-            spn.post {
-                spn.onItemSelectedListener = object : OnItemSelectedListener {
-                    override fun onItemSelected(parent: AdapterView<*>?, selc: View?, pos: Int, id: Long) {
-                        if((pos-1) == cur_selced)
-                            return;
-                        if(pos == 0)
-                            do_login();
-                        else
-                            load_friend_table(friends[pos-1]);
-                        Log.println(Log.DEBUG, "tga", "pos: $pos");
-                    }
-
-                    override fun onNothingSelected(parent: AdapterView<*>?) {
-                        return;
-                    }
-                }
-                spn.setSelection(cur_selced+1);
-            }
-            var sdfmt = when (dm % 10) {
-                1 -> sdfmt1;
-                2 -> sdfmt2;
-                3 -> sdfmt3;
-                else -> {
-                    sdfmt4; }
-            }
-            if (dm >= 11 && dm <= 13)
-                sdfmt = sdfmt4;
-            val s = sdfmt.format(date.getTime());
-            tview.text = s;
-            shareb.setCompoundDrawablesWithIntrinsicBounds(android.R.drawable.ic_menu_share, 0, 0, 0);
-            shareb.setOnClickListener {
-                do_share();
-            }
-            rref.setOnClickListener {
-                cache_view?.clear_all();
-                friends.clear();
-                do_login();
-            }
-            button2.setOnClickListener {
-                if(date.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
-                    date.add(Calendar.DATE, -1);
-                    var dm = date.get(Calendar.DAY_OF_MONTH);
-                    var sdfmt = when (dm % 10) {
-                        1 -> sdfmt1;
-                        2 -> sdfmt2;
-                        3 -> sdfmt3;
-                        else -> {
-                            sdfmt4; }
-                    }
-                    if (dm >= 11 && dm <= 13)
-                        sdfmt = sdfmt4;
-                    val s = sdfmt.format(date.getTime());
-                    tview.text = s;
-                    update_texts();
-                }
-            }
-            button1.setOnClickListener {
-                if(date.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
-                    date.add(Calendar.DATE, 1);
-                    var dm = date.get(Calendar.DAY_OF_MONTH);
-                    var sdfmt = when (dm % 10) {
-                        1 -> sdfmt1;
-                        2 -> sdfmt2;
-                        3 -> sdfmt3;
-                        else -> {
-                            sdfmt4; }
-                    }
-                    if (dm >= 11 && dm <= 13)
-                        sdfmt = sdfmt4;
-                    val s = sdfmt.format(date.getTime());
-                    tview.text = s;
-                    update_texts();
-                }
-            }
-            button3.setOnClickListener {
-                val tst = GregorianCalendar();
-                date.set(Calendar.DAY_OF_WEEK, tst.get(Calendar.DAY_OF_WEEK));
-                var dm = date.get(Calendar.DAY_OF_MONTH);
-                var sdfmt = when (dm % 10) {
-                    1 -> sdfmt1;
-                    2 -> sdfmt2;
-                    3 -> sdfmt3;
-                    else -> {
-                        sdfmt4; }
-                }
-                if (dm >= 11 && dm <= 13)
-                    sdfmt = sdfmt4;
-                val s = sdfmt.format(date.getTime());
-                tview.text = s;
-                update_texts();
-            }
-
-            scv.setOnTouchListener(object : gesture_swipe(this) {
-                override fun onSwipeRight() {
-                    if(date.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
-                        date.add(Calendar.DATE, -1);
-                        var dm = date.get(Calendar.DAY_OF_MONTH);
-                        var sdfmt = when (dm % 10) {
-                            1 -> sdfmt1;
-                            2 -> sdfmt2;
-                            3 -> sdfmt3;
-                            else -> {
-                                sdfmt4; }
-                        }
-                        if (dm >= 11 && dm <= 13)
-                            sdfmt = sdfmt4;
-                        val s = sdfmt.format(date.getTime());
-                        tview.text = s;
-                        update_texts();
-                    }
-                }
-
-                override fun onDoubleClick() {
-                    val tst = GregorianCalendar();
-                    date.set(Calendar.DAY_OF_WEEK, tst.get(Calendar.DAY_OF_WEEK));
-                    var dm = date.get(Calendar.DAY_OF_MONTH);
-                    var sdfmt = when (dm % 10) {
-                        1 -> sdfmt1;
-                        2 -> sdfmt2;
-                        3 -> sdfmt3;
-                        else -> {
-                            sdfmt4; }
-                    }
-                    if (dm >= 11 && dm <= 13)
-                        sdfmt = sdfmt4;
-                    val s = sdfmt.format(date.getTime());
-                    tview.text = s;
-                    update_texts();
-                }
-
-                override fun onSwipeLeft() {
-                    if(date.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
-                        date.add(Calendar.DATE, 1);
-                        var dm = date.get(Calendar.DAY_OF_MONTH);
-                        var sdfmt = when (dm % 10) {
-                            1 -> sdfmt1;
-                            2 -> sdfmt2;
-                            3 -> sdfmt3;
-                            else -> {
-                                sdfmt4; }
-                        }
-                        if (dm >= 11 && dm <= 13)
-                            sdfmt = sdfmt4;
-                        val s = sdfmt.format(date.getTime());
-                        tview.text = s;
-                        update_texts();
-                    }
-                }
-            })
-            update_texts();
-        }
+        ui_timetable();
     }
     fun weather_code_to_url(weather_code : Int, is_day : Boolean) : String
     {
@@ -1547,7 +1625,7 @@ class focus_main : AppCompatActivity() {
         nulltimetable_day?.add_ev(timetable_event(c5, c6, "Study Period", "—", "—"))
         nulltimetable_day?.add_ev(timetable_event(c7, c8, "Study Period", "—", "—"))
     }
-    fun init_login()
+    fun init_login_nt()
     {
         setContentView(R.layout.activity_focus_main);
 
@@ -1557,6 +1635,10 @@ class focus_main : AppCompatActivity() {
         views[1] = timetable_view(findViewById<TextView>(R.id.v2time), findViewById<TextView>(R.id.v2room), findViewById<TextView>(R.id.v2staff), findViewById<TextView>(R.id.v2title), findViewById<LinearLayout>(R.id.l2), findViewById<RecyclerView>(R.id.rec2));
         views[2] = timetable_view(findViewById<TextView>(R.id.v3time), findViewById<TextView>(R.id.v3room), findViewById<TextView>(R.id.v3staff), findViewById<TextView>(R.id.v3title), findViewById<LinearLayout>(R.id.l3), findViewById<RecyclerView>(R.id.rec3));
         views[3] = timetable_view(findViewById<TextView>(R.id.v4time), findViewById<TextView>(R.id.v4room), findViewById<TextView>(R.id.v4staff), findViewById<TextView>(R.id.v4title), findViewById<LinearLayout>(R.id.l4), findViewById<RecyclerView>(R.id.rec4));
+    }
+    fun init_login()
+    {
+        init_login_nt();
         init_nullt();
     }
     fun finish_login()
@@ -1698,189 +1780,14 @@ class focus_main : AppCompatActivity() {
         cache_view?.delete_of(friend.person_name);
         cache_view?.insert(cache_save);
     }
-    @SuppressLint("ClickableViewAccessibility")
     fun continue_fcache()
     {
-        runOnUiThread {
-            val tself = findViewById<TextView>(R.id.person);
-            if(self_person)
-                tself.text = "Your Timetable";
-            else
-                tself.text = "$person_name's Timetable";
-            val tview = findViewById<TextView>(R.id.view7);
-            val button2 = findViewById<Button>(R.id.button2);
-            val button1 = findViewById<Button>(R.id.button);
-            val button3 = findViewById<Button>(R.id.button3);
-            var dm = date.get(Calendar.DAY_OF_MONTH);
-            var scv = findViewById<ScrollView>(R.id.scroll_view);
-            var spn = findViewById<Spinner>(R.id.spinner);
-            var rref = findViewById<Button>(R.id.share2);
-            val items : Array<String> = Array<String>(friends.size+1, {
-                if(it == 0)
-                    "Your timetable";
-                else
-                    "${friends[it-1].person_name!!}'s timetable";
-            });
-            var aa = ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, items);
-            spn.adapter = aa;
-            spn.post {
-                spn.onItemSelectedListener = object : OnItemSelectedListener {
-                    override fun onItemSelected(parent: AdapterView<*>?, selc: View?, pos: Int, id: Long) {
-                        if((pos-1) == cur_selced)
-                            return;
-                        if(pos == 0)
-                            do_login();
-                        else
-                            load_friend_table(friends[pos-1]);
-                        Log.println(Log.DEBUG, "tga", "pos: $pos");
-                    }
-
-                    override fun onNothingSelected(parent: AdapterView<*>?) {
-                        return;
-                    }
-                }
-                spn.setSelection(cur_selced+1);
-            }
-            var sdfmt = when (dm % 10) {
-                1 -> sdfmt1;
-                2 -> sdfmt2;
-                3 -> sdfmt3;
-                else -> {
-                    sdfmt4; }
-            }
-            if (dm >= 11 && dm <= 13)
-                sdfmt = sdfmt4;
-            val s = sdfmt.format(date.getTime());
-            tview.text = s;
-            rref.setOnClickListener {
-                cache_view?.clear_all();
-                friends.clear();
-                do_login();
-            }
-            button2.setOnClickListener {
-                if (date.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
-                    date.add(Calendar.DATE, -1);
-                    var dm = date.get(Calendar.DAY_OF_MONTH);
-                    var sdfmt = when (dm % 10) {
-                        1 -> sdfmt1;
-                        2 -> sdfmt2;
-                        3 -> sdfmt3;
-                        else -> {
-                            sdfmt4; }
-                    }
-                    if (dm >= 11 && dm <= 13)
-                        sdfmt = sdfmt4;
-                    val s = sdfmt.format(date.getTime());
-                    tview.text = s;
-                    update_texts();
-                }
-            }
-            button1.setOnClickListener {
-                if (date.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
-                    date.add(Calendar.DATE, 1);
-                    var dm = date.get(Calendar.DAY_OF_MONTH);
-                    var sdfmt = when (dm % 10) {
-                        1 -> sdfmt1;
-                        2 -> sdfmt2;
-                        3 -> sdfmt3;
-                        else -> {
-                            sdfmt4; }
-                    }
-                    if (dm >= 11 && dm <= 13)
-                        sdfmt = sdfmt4;
-                    val s = sdfmt.format(date.getTime());
-                    tview.text = s;
-                    update_texts();
-                }
-            }
-            button3.setOnClickListener {
-                val tst = GregorianCalendar();
-                date.set(Calendar.DAY_OF_WEEK, tst.get(Calendar.DAY_OF_WEEK));
-                var dm = date.get(Calendar.DAY_OF_MONTH);
-                var sdfmt = when (dm % 10) {
-                    1 -> sdfmt1;
-                    2 -> sdfmt2;
-                    3 -> sdfmt3;
-                    else -> {
-                        sdfmt4; }
-                }
-                if (dm >= 11 && dm <= 13)
-                    sdfmt = sdfmt4;
-                val s = sdfmt.format(date.getTime());
-                tview.text = s;
-                update_texts();
-            }
-            scv.setOnTouchListener(object : gesture_swipe(this) {
-                override fun onSwipeRight() {
-                    if (date.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
-                        date.add(Calendar.DATE, -1);
-                        var dm = date.get(Calendar.DAY_OF_MONTH);
-                        var sdfmt = when (dm % 10) {
-                            1 -> sdfmt1;
-                            2 -> sdfmt2;
-                            3 -> sdfmt3;
-                            else -> {
-                                sdfmt4; }
-                        }
-                        if (dm >= 11 && dm <= 13)
-                            sdfmt = sdfmt4;
-                        val s = sdfmt.format(date.getTime());
-                        tview.text = s;
-                        update_texts();
-                    }
-                }
-
-                override fun onDoubleClick() {
-                    val tst = GregorianCalendar();
-                    date.set(Calendar.DAY_OF_WEEK, tst.get(Calendar.DAY_OF_WEEK));
-                    var dm = date.get(Calendar.DAY_OF_MONTH);
-                    var sdfmt = when (dm % 10) {
-                        1 -> sdfmt1;
-                        2 -> sdfmt2;
-                        3 -> sdfmt3;
-                        else -> {
-                            sdfmt4; }
-                    }
-                    if (dm >= 11 && dm <= 13)
-                        sdfmt = sdfmt4;
-                    val s = sdfmt.format(date.getTime());
-                    tview.text = s;
-                    update_texts();
-                }
-
-                override fun onSwipeLeft() {
-                    if (date.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
-                        date.add(Calendar.DATE, 1);
-                        var dm = date.get(Calendar.DAY_OF_MONTH);
-                        var sdfmt = when (dm % 10) {
-                            1 -> sdfmt1;
-                            2 -> sdfmt2;
-                            3 -> sdfmt3;
-                            else -> {
-                                sdfmt4; }
-                        }
-                        if (dm >= 11 && dm <= 13)
-                            sdfmt = sdfmt4;
-                        val s = sdfmt.format(date.getTime());
-                        tview.text = s;
-                        update_texts();
-                    }
-                }
-            })
-            update_texts();
-        }
+        ui_timetable();
     }
     fun continue_friend()
     {
         runOnUiThread {
-            val sh = findViewById<Button>(R.id.share);
-            sh.setOnClickListener {
-                do_login();
-            }
-            sh.setCompoundDrawablesWithIntrinsicBounds(android.R.drawable.ic_menu_close_clear_cancel, 0, 0, 0);
-            var spn = findViewById<Spinner>(R.id.spinner);
-            spn.setSelection(cur_selced+1);
-            Log.println(Log.DEBUG, "selction:", "${cur_selced+1} i ${spn.selectedItemPosition}");
+            //Log.println(Log.DEBUG, "selction:", "${cur_selced+1} i ${spn.selectedItemPosition}");
             continue_fcache();
         }
     }
@@ -1889,15 +1796,8 @@ class focus_main : AppCompatActivity() {
     {
         runOnUiThread {
             //update_weather_day();
-            var spn = findViewById<Spinner>(R.id.spinner);
-            spn.setSelection(cur_selced+1);
-            Log.println(Log.DEBUG, "selction:", "${cur_selced+1} i ${spn.selectedItemPosition}");
+            //Log.println(Log.DEBUG, "selction:", "${cur_selced+1} i ${spn.selectedItemPosition}");
             continue_fcache();
-            val shareb = findViewById<Button>(R.id.share);
-            shareb.setCompoundDrawablesWithIntrinsicBounds(android.R.drawable.ic_menu_share, 0, 0, 0);
-            shareb.setOnClickListener {
-                do_share();
-            }
         }
     }
     fun load_friend_cache(week: week_cached) : timetable_friend
@@ -2070,7 +1970,11 @@ class focus_main : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         cache_view = ViewModelProvider(this)[week_view::class.java];
+        shared_prefs = this.getPreferences(Context.MODE_PRIVATE);
         enableEdgeToEdge()
+
+        weather = shared_prefs?.getBoolean("weather_enabled", true)!!;
+        hide_friends = shared_prefs?.getBoolean("hide_friends", false)!!;
 
         setContentView(R.layout.activity_focus_main)
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->

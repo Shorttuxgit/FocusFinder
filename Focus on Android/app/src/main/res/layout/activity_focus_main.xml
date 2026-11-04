@@ -30,19 +30,20 @@
                 android:orientation="horizontal">
 
                 <LinearLayout
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_weight="0.12"
                     android:orientation="vertical">
 
                     <TextView
                         android:id="@+id/view7"
-                        android:layout_width="350dp"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:gravity="center"
                         android:singleLine="true"
                         android:text="@string/current_date"
                         android:textAlignment="center"
-                        android:textColor="@android:color/system_accent1_300"
+                        android:textColor="@color/material_dynamic_primary70"
                         android:textSize="24dp"
                         android:textStyle="bold" />
 
@@ -54,7 +55,7 @@
                         android:singleLine="true"
                         android:text="@string/current_date"
                         android:textAlignment="center"
-                        android:textColor="@android:color/system_accent1_300"
+                        android:textColor="@color/material_dynamic_primary70"
                         android:textSize="19dp"
                         android:textStyle="bold" />
 
@@ -66,14 +67,16 @@
                         android:singleLine="true"
                         android:text="@string/current_date"
                         android:textAlignment="center"
-                        android:textColor="@android:color/system_accent1_300"
+                        android:textColor="@color/material_dynamic_primary70"
                         android:textSize="24dp"
                         android:textStyle="bold" />
                 </LinearLayout>
 
                 <LinearLayout
-                    android:layout_width="wrap_content"
+                    android:id="@+id/wther"
+                    android:layout_width="match_parent"
                     android:layout_height="match_parent"
+                    android:layout_weight="0.8"
                     android:orientation="vertical">
 
                     <ImageView
@@ -103,7 +106,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="match_parent"
                     android:layout_weight="0.6"
-                    android:backgroundTint="@android:color/system_control_normal_light"
+                    android:backgroundTint="@color/material_dynamic_neutral_variant40"
                     android:paddingLeft="0dp"
                     android:paddingRight="0dp"
                     android:text="＜＜ Previous Day"
@@ -117,7 +120,7 @@
                     android:layout_marginLeft="5dp"
                     android:layout_marginRight="5dp"
                     android:layout_weight="1.0"
-                    android:backgroundTint="@android:color/system_neutral1_400"
+                    android:backgroundTint="@color/material_dynamic_neutral60"
                     android:paddingLeft="0dp"
                     android:paddingRight="0dp"
                     android:text="Today"
@@ -129,7 +132,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="match_parent"
                     android:layout_weight="0.6"
-                    android:backgroundTint="@android:color/system_control_normal_light"
+                    android:backgroundTint="@color/material_dynamic_neutral_variant40"
                     android:paddingLeft="0dp"
                     android:paddingRight="0dp"
                     android:text="Next Day  ＞＞"
@@ -143,7 +146,7 @@
                     android:layout_marginLeft="5dp"
                     android:layout_marginRight="5dp"
                     android:layout_weight="0.1"
-                    android:backgroundTint="@android:color/system_neutral1_400"
+                    android:backgroundTint="@color/material_dynamic_neutral60"
                     android:drawableLeft="@android:drawable/ic_menu_share"
                     android:paddingLeft="16dp"
                     android:paddingRight="0dp"
@@ -158,9 +161,9 @@
                     android:layout_width="50dp"
                     android:layout_height="match_parent"
                     android:layout_weight="0.6"
-                    android:backgroundTint="@android:color/system_neutral1_400"
-                    android:drawableLeft="@android:drawable/stat_notify_sync"
-                    android:paddingLeft="16dp"
+                    android:backgroundTint="@color/material_dynamic_neutral60"
+                    android:drawableLeft="@android:drawable/ic_menu_preferences"
+                    android:paddingLeft="12dp"
                     android:paddingRight="0dp"
                     android:textColor="@color/white"
                     android:textSize="10dp"
