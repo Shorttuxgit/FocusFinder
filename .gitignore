@@ -1,5 +1,6 @@
 session.json
 timetable_cache.json
+friends_cache.json
 .DS_Store
 /.build
 /Packages
