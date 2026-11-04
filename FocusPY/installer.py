@@ -1,150 +1,919 @@
-#!/bin/python3
+#!/usr/bin/env python3
+
 import os
+import re
 import sys
+import shutil
 import platform
 import subprocess
-import shutil
+import tempfile
+from pathlib import Path
+
+
+# --------------------------------------------------
+# Configuration
+# --------------------------------------------------
+
+APP_NAME = "focusfinder"
+DISPLAY_NAME = "FocusFinder"
+APP_ID = "focusfinder"
+PACKAGE_NAME = "FocusPY"
+
+VERSION = "1.1.0"
+
+# Rebuild the application files and virtual environment during updates.
+CLEAN_INSTALL = True
+
+# Delete saved settings, timetables, friends and sessions during clean updates.
+# This setting requires CLEAN_INSTALL to be True.
+WIPE_USER_DATA = True
 
 CURRENT_OS = platform.system()
-APP_NAME = "FocusFinder"
+
+SOURCE_DIR = Path(__file__).resolve().parent
+SOURCE_MAIN = SOURCE_DIR / "main.py"
+SOURCE_SRC = SOURCE_DIR / "src"
+
+REQUIRED_PACKAGES = [
+    "customtkinter",
+    "playwright",
+]
+
+USER_DATA_FILES = {
+    "session.json",
+    "timetable_cache.json",
+    "friends_cache.json",
+    "config.json",
+}
+
+PRESERVE_SUFFIXES = {
+    ".json",
+    ".db",
+    ".sqlite",
+    ".sqlite3",
+    ".ini",
+    ".toml",
+    ".fff",
+}
+
+PRESERVE_DIRECTORIES = {
+    "userdata",
+    "user_data",
+    "user-data",
+    "saves",
+}
+
+IGNORE_PATTERNS = shutil.ignore_patterns(
+    "installer.py",
+    "__pycache__",
+    "*.pyc",
+    "*.pyo",
+    ".git",
+    ".venv",
+    "venv",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+)
+
+
+# --------------------------------------------------
+# Installation paths
+# --------------------------------------------------
+
+def get_data_home():
+    """Return the platform-specific application data directory."""
+
+    if CURRENT_OS == "Windows":
+        return Path(
+            os.environ.get(
+                "LOCALAPPDATA",
+                Path.home() / "AppData" / "Local",
+            )
+        )
+
+    if CURRENT_OS == "Linux":
+        return Path(
+            os.environ.get(
+                "XDG_DATA_HOME",
+                Path.home() / ".local" / "share",
+            )
+        )
+
+    return None
 
 
 def get_install_dir():
-    """Returns the correct installation directory based on the OS."""
-    if CURRENT_OS == "Windows":
-        app_data = os.environ.get("LOCALAPPDATA", os.path.expanduser("~\\AppData\\Local"))
-        return os.path.join(app_data, APP_NAME)
-    elif CURRENT_OS == "Linux":
-        return os.path.expanduser(f"~/.local/share/{APP_NAME.lower()}")
-    return None
+    """Return the canonical, lowercase installation directory."""
+
+    base_dir = get_data_home()
+    return base_dir / APP_NAME if base_dir else None
 
 
-def find_pythonw():
-    """Locates pythonw.exe on the system."""
-    path = shutil.which("pythonw")
-    if path:
-        return path
-    candidates = [
-        os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Python"),
-        os.path.join(os.environ.get("LOCALAPPDATA", ""), "Python", "bin"),
-        os.path.join(os.environ.get("PROGRAMFILES", ""), "Python"),
-        os.path.join(os.environ.get("PROGRAMFILES(X86)", ""), "Python"),
-    ]
-    for base in candidates:
-        if not os.path.isdir(base):
+def get_existing_install_dir():
+    """Find the current installation, including the previous mixed-case path."""
+
+    canonical_dir = get_install_dir()
+    legacy_dir = canonical_dir.parent / "FocusFinder"
+
+    if canonical_dir.exists():
+        return canonical_dir
+
+    if legacy_dir.exists():
+        return legacy_dir
+
+    return canonical_dir
+
+
+def get_linux_applications_dir():
+    return get_data_home() / "applications"
+
+
+def get_windows_start_menu():
+    return (
+        Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+        / "Microsoft"
+        / "Windows"
+        / "Start Menu"
+        / "Programs"
+    )
+
+
+# --------------------------------------------------
+# Validation and version checking
+# --------------------------------------------------
+
+def validate_configuration():
+    """Reject release settings that would produce an ambiguous operation."""
+
+    if WIPE_USER_DATA and not CLEAN_INSTALL:
+        raise ValueError(
+            "WIPE_USER_DATA can only be enabled when CLEAN_INSTALL is True."
+        )
+
+    parse_version(VERSION)
+
+
+def validate_source():
+    """Check that the downloaded application folder is complete."""
+
+    if not SOURCE_MAIN.is_file():
+        raise FileNotFoundError(
+            f"Could not find main.py beside installer.py:\n{SOURCE_MAIN}"
+        )
+
+    if not SOURCE_SRC.is_dir():
+        raise FileNotFoundError(
+            f"Could not find the src folder:\n{SOURCE_SRC}"
+        )
+
+
+def validate_install_location(install_dir):
+    """Ensure destructive operations target a recognised installation path."""
+
+    expected_parent = get_data_home().resolve()
+
+    if install_dir.name not in {APP_NAME, "FocusFinder"}:
+        raise ValueError("Invalid installation directory.")
+
+    if install_dir.parent.resolve() != expected_parent:
+        raise ValueError("Installation directory is outside the expected location.")
+
+
+def parse_version(version):
+    """Parse a numeric release version such as 1.2.3 for comparison."""
+
+    version = str(version).strip()
+
+    if not re.fullmatch(r"\d+(?:\.\d+)*", version):
+        raise ValueError(
+            f"Invalid version '{version}'. Use numeric versions such as 1.2.3."
+        )
+
+    return tuple(int(part) for part in version.split("."))
+
+
+def compare_versions(first, second):
+    """Return -1, 0 or 1 after comparing numeric version components."""
+
+    first_parts = parse_version(first)
+    second_parts = parse_version(second)
+    length = max(len(first_parts), len(second_parts))
+
+    first_parts += (0,) * (length - len(first_parts))
+    second_parts += (0,) * (length - len(second_parts))
+
+    return (first_parts > second_parts) - (first_parts < second_parts)
+
+
+def get_installed_version(install_dir):
+    """Read the installed version, or return Unknown for legacy installations."""
+
+    version_file = install_dir / "version.txt"
+
+    if not version_file.is_file():
+        return "Unknown"
+
+    try:
+        version = version_file.read_text(encoding="utf-8").strip()
+        return version or "Unknown"
+    except OSError:
+        return "Unknown"
+
+
+def check_installed_version(install_dir):
+    """Block this installer if it is older than the installed application."""
+
+    package_dir = install_dir / PACKAGE_NAME
+    if not install_dir.is_dir() or not package_dir.is_dir():
+        return True
+
+    installed_version = get_installed_version(install_dir)
+
+    print(f"Installed version: {installed_version}")
+    print(f"Installer version: {VERSION}")
+
+    if installed_version == "Unknown":
+        if CLEAN_INSTALL:
+            print(
+                "[!] This is a legacy installation without version information."
+            )
+            print("[!] It will be handled using the configured clean-install process.")
+            return True
+
+        print()
+        print("[!] INSTALLER BLOCKED")
+        print("This installation has no recorded version, so its age cannot be verified.")
+        print("This release has CLEAN_INSTALL disabled; refusing to continue safely.")
+        return False
+
+    try:
+        comparison = compare_versions(VERSION, installed_version)
+    except ValueError:
+        print()
+        print("[!] INSTALLER BLOCKED")
+        print(f"The installed version number '{installed_version}' is not recognised.")
+        print("Please install a valid newer release or resolve the version file first.")
+        return False
+
+    if comparison < 0:
+        print()
+        print("[!] INSTALLER BLOCKED — THIS IS AN OLDER VERSION")
+        print(f"You currently have FocusFinder {installed_version} installed.")
+        print(f"This installer contains FocusFinder {VERSION}.")
+        print("Please download the latest release before continuing.")
+        return False
+
+    if comparison == 0:
+        print("[+] This installer matches the installed version.")
+    else:
+        print("[+] This installer is newer than the installed version.")
+
+    return True
+
+
+def save_installed_version(install_dir):
+    """Record the installed version after the installation succeeds."""
+
+    version_file = install_dir / "version.txt"
+    version_file.write_text(VERSION + "\n", encoding="utf-8")
+
+# --------------------------------------------------
+# User data backup and restoration
+# --------------------------------------------------
+
+def should_preserve_file(path, package_dir):
+    """Identify files that may contain user data."""
+
+    relative_path = path.relative_to(package_dir)
+
+    if path.name.lower() in USER_DATA_FILES:
+        return True
+
+    if path.suffix.lower() in PRESERVE_SUFFIXES:
+        return True
+
+    return any(
+        part.lower() in PRESERVE_DIRECTORIES
+        for part in relative_path.parts
+    )
+
+
+def backup_user_data(package_dir, backup_dir):
+    """Copy recognised user data to a separate temporary directory."""
+
+    if not package_dir.exists():
+        return
+
+    for path in package_dir.rglob("*"):
+        if not path.is_file() or not should_preserve_file(path, package_dir):
             continue
-        for entry in os.listdir(base):
-            candidate = os.path.join(base, entry, "pythonw.exe")
-            if os.path.isfile(candidate):
-                return candidate
-        direct = os.path.join(base, "pythonw.exe")
-        if os.path.isfile(direct):
-            return direct
-    return None
+
+        relative_path = path.relative_to(package_dir)
+        backup_path = backup_dir / relative_path
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, backup_path)
 
 
-def setup_windows(install_dir):
-    """Handles installation, script placement, and Start Menu shortcut on Windows."""
-    print("[*] Configuring Windows integration...")
+def restore_user_data(package_dir, backup_dir):
+    """Restore backed-up user data into the new application package."""
 
-    target_script = os.path.join(install_dir, "Focus.py")
-    icon_path = os.path.join(install_dir, "icon.ico")
+    if not backup_dir.exists():
+        return
 
-    pythonw = find_pythonw()
-    if not pythonw:
-        print("[!] Could not find pythonw.exe. Shortcut will use 'python' instead.")
-        pythonw = shutil.which("python") or "python"
+    for path in backup_dir.rglob("*"):
+        if not path.is_file():
+            continue
 
-    start_menu = os.path.join(os.environ.get("APPDATA", ""), "Microsoft\\Windows\\Start Menu\\Programs")
-    shortcut_path = os.path.join(start_menu, f"{APP_NAME}.lnk")
-
-    ps_command = f"""
-    $WshShell = New-Object -comObject WScript.Shell
-    $Shortcut = $WshShell.CreateShortcut("{shortcut_path}")
-    $Shortcut.TargetPath = "{pythonw}"
-    $Shortcut.Arguments = "{target_script}"
-    $Shortcut.WorkingDirectory = "{install_dir}"
-    $Shortcut.IconLocation = "{icon_path}"
-    $Shortcut.WindowStyle = 7
-    $Shortcut.Save()
-    """
-    subprocess.run(["powershell", "-Command", ps_command], capture_output=True)
-    print(f"    + Shortcut created: {shortcut_path}")
-    print(f"    + Using interpreter: {pythonw}")
+        relative_path = path.relative_to(backup_dir)
+        destination = package_dir / relative_path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, destination)
 
 
-def setup_linux(install_dir):
-    """Handles installation, script placement, and Desktop entry on Linux."""
-    print("[*] Configuring Linux integration...")
+def describe_user_data_wipe():
+    """Print the user-data categories that the configured wipe will remove."""
 
-    target_script = os.path.join(install_dir, "Focus.py")
-    icon_path = os.path.join(install_dir, "icon.png")
+    print("\nUSER DATA REMOVAL")
+    print("This release is configured to remove saved application data, including:")
+    print("  - Application settings and configuration")
+    print("  - Cached timetables")
+    print("  - Saved friends and shared timetable data")
+    print("  - Login/session information")
+    print("  - Other recognised saved-data files and folders")
+    print("\nThis data will NOT be backed up or restored.")
 
-    applications_dir = os.path.expanduser("~/.local/share/applications")
-    os.makedirs(applications_dir, exist_ok=True)
-    desktop_file_path = os.path.join(applications_dir, f"{APP_NAME.lower()}.desktop")
 
-    desktop_entry = f"""[Desktop Entry]
-Type=Application
-Name={APP_NAME}
-Exec=GDK_BACKEND=X11 python3 "{target_script}"
-Icon={icon_path if os.path.exists(icon_path) else ""}
-StartupWMClass=focusfinder
-Terminal=false
-Categories=Education;Utility;
+# --------------------------------------------------
+# Application files
+# --------------------------------------------------
+
+def copy_application(install_dir, preserve_data=False):
+    """Copy application files into the installation directory."""
+
+    print("[*] Copying application files...")
+    install_package = install_dir / PACKAGE_NAME
+
+    if SOURCE_DIR.resolve() == install_package.resolve():
+        raise RuntimeError(
+            "Run installer.py from the downloaded FocusPY folder, "
+            "not from the installed application."
+        )
+
+    if preserve_data:
+        with tempfile.TemporaryDirectory(prefix="focusfinder-update-") as temporary:
+            backup_dir = Path(temporary)
+            backup_user_data(install_package, backup_dir)
+
+            try:
+                shutil.copytree(
+                    SOURCE_DIR,
+                    install_package,
+                    dirs_exist_ok=True,
+                    ignore=IGNORE_PATTERNS,
+                )
+            finally:
+                restore_user_data(install_package, backup_dir)
+    else:
+        shutil.copytree(
+            SOURCE_DIR,
+            install_package,
+            dirs_exist_ok=True,
+            ignore=IGNORE_PATTERNS,
+        )
+
+    if CURRENT_OS == "Windows":
+        shutil.copy2(install_package / "main.py", install_package / "main.pyw")
+        print("    + Created Windows GUI entry point.")
+
+    print(f"    + Application copied to: {install_package}")
+    return install_package
+
+
+# --------------------------------------------------
+# Virtual environment and dependencies
+# --------------------------------------------------
+
+def setup_venv(install_dir):
+    """Create or reuse the application's virtual environment."""
+
+    print("[*] Setting up virtual environment...")
+    venv_dir = install_dir / "venv"
+
+    if CURRENT_OS == "Windows":
+        venv_python = venv_dir / "Scripts" / "python.exe"
+        venv_pythonw = venv_dir / "Scripts" / "pythonw.exe"
+    else:
+        venv_python = venv_dir / "bin" / "python"
+        venv_pythonw = venv_python
+
+    if not venv_python.exists():
+        print("    + Creating virtual environment...")
+        subprocess.run(
+            [sys.executable, "-m", "venv", str(venv_dir)],
+            check=True,
+        )
+
+    if not venv_python.exists():
+        raise FileNotFoundError(
+            f"Virtual environment Python was not created:\n{venv_python}"
+        )
+
+    subprocess.run(
+        [str(venv_python), "-m", "ensurepip", "--upgrade"],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    return venv_python, venv_pythonw
+
+
+def install_dependencies(venv_python, install_package):
+    """Install or update the application's Python dependencies."""
+
+    print("[*] Installing Python dependencies...")
+    subprocess.run(
+        [str(venv_python), "-m", "pip", "install", "--upgrade", "pip"],
+        check=True,
+    )
+
+    requirements_file = install_package / "requirements.txt"
+
+    if requirements_file.exists():
+        subprocess.run(
+            [str(venv_python), "-m", "pip", "install", "-r", str(requirements_file)],
+            check=True,
+        )
+    else:
+        subprocess.run(
+            [str(venv_python), "-m", "pip", "install", *REQUIRED_PACKAGES],
+            check=True,
+        )
+
+    print("[*] Installing Playwright Chromium...")
+    subprocess.run(
+        [str(venv_python), "-m", "playwright", "install", "chromium"],
+        check=True,
+    )
+
+
+# --------------------------------------------------
+# Windows integration
+# --------------------------------------------------
+
+def powershell_literal(value):
+    """Safely quote a string for PowerShell."""
+
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def setup_windows(install_package, venv_pythonw):
+    """Create a Windows Start Menu shortcut."""
+
+    print("[*] Creating Windows shortcut...")
+    pythonw = venv_pythonw if venv_pythonw.exists() else venv_pythonw.with_name("python.exe")
+    target_script = install_package / "main.pyw"
+    icon_path = install_package / "icon.ico"
+
+    start_menu = get_windows_start_menu()
+    start_menu.mkdir(parents=True, exist_ok=True)
+    shortcut_path = start_menu / f"{APP_ID}.lnk"
+
+    icon_setting = ""
+    if icon_path.exists():
+        icon_setting = f"$Shortcut.IconLocation = {powershell_literal(icon_path)}"
+
+    powershell_script = f"""
+$WshShell = New-Object -ComObject WScript.Shell
+$Shortcut = $WshShell.CreateShortcut({powershell_literal(shortcut_path)})
+$Shortcut.TargetPath = {powershell_literal(pythonw)}
+$Shortcut.Arguments = {powershell_literal('"' + str(target_script) + '"')}
+$Shortcut.WorkingDirectory = {powershell_literal(install_package)}
+{icon_setting}
+$Shortcut.Save()
 """
 
-    with open(desktop_file_path, "w") as f:
-        f.write(desktop_entry)
+    subprocess.run(
+        [
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            powershell_script,
+        ],
+        check=True,
+    )
 
-    os.chmod(desktop_file_path, 0o755)
-
-
-def install_dependencies():
-    """Installs required Python packages automatically."""
-    print("[*] Checking and updating required Python packages (customtkinter, playwright)...")
-    try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "customtkinter", "playwright"])
-        print("[*] Ensuring Playwright Chromium browser binaries are up to date...")
-        subprocess.check_call([sys.executable, "-m", "playwright", "install", "chromium"])
-    except Exception as e:
-        print(f"[!] Warning during dependency installation: {e}")
+    print(f"    + Shortcut created: {shortcut_path}")
 
 
-if __name__ == "__main__":
-    print(f"--- {APP_NAME} Installer & Updater ({CURRENT_OS}) ---")
+# --------------------------------------------------
+# Linux integration
+# --------------------------------------------------
 
-    install_dir = get_install_dir()
-    if not install_dir:
-        print(f"[!] Unsupported operating system: {CURRENT_OS}")
-        sys.exit(1)
+def desktop_quote(value):
+    """Escape a path for use in a desktop entry."""
 
-    is_update = os.path.exists(install_dir)
-    if is_update:
-        print(f"[*] Existing installation detected at: {install_dir}")
-        print("[*] Updating app files (your login session and cache will be preserved)...")
-    else:
-        print(f"[*] Performing fresh installation to: {install_dir}")
+    value = str(value)
+    value = value.replace("\\", "\\\\")
+    value = value.replace('"', '\\"')
+    value = value.replace("`", "\\`")
+    value = value.replace("$", "\\$")
+    return f'"{value}"'
 
-    os.makedirs(install_dir, exist_ok=True)
 
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    files_to_copy = ["Focus.py", "icon.png", "icon.ico"]
+def setup_linux(install_package, venv_python):
+    """Create a Linux desktop application shortcut."""
 
-    for file_name in files_to_copy:
-        src = os.path.join(current_dir, file_name)
-        if os.path.exists(src):
-            shutil.copy(src, install_dir)
-            print(f"    + Updated {file_name}")
+    print("[*] Creating Linux desktop shortcut...")
+    applications_dir = get_linux_applications_dir()
+    applications_dir.mkdir(parents=True, exist_ok=True)
 
-    install_dependencies()
+    desktop_file = applications_dir / f"{APP_ID}.desktop"
+    target_script = install_package / "main.py"
+    icon_path = install_package / "icon.png"
+
+    exec_command = (
+        f"env GDK_BACKEND=X11 "
+        f"{desktop_quote(venv_python)} "
+        f"{desktop_quote(target_script)}"
+    )
+
+    desktop_entry = [
+        "[Desktop Entry]",
+        "Version=1.0",
+        "Type=Application",
+        f"Name={DISPLAY_NAME}",
+        f"Exec={exec_command}",
+        f"Path={install_package}",
+        f"Icon={icon_path}" if icon_path.exists() else "",
+        f"StartupWMClass={APP_ID}",
+        "Terminal=false",
+        "Categories=Education;Utility;",
+    ]
+
+    desktop_file.write_text(
+        "\n".join(line for line in desktop_entry if line) + "\n",
+        encoding="utf-8",
+    )
+    desktop_file.chmod(0o755)
+
+    update_database = shutil.which("update-desktop-database")
+    if update_database:
+        subprocess.run(
+            [update_database, str(applications_dir)],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    print(f"    + Created: {desktop_file}")
+
+
+# --------------------------------------------------
+# Shortcut and installation removal
+# --------------------------------------------------
+
+def remove_shortcuts():
+    """Remove FocusFinder shortcuts from the operating system."""
+
+    print("[*] Removing application shortcuts...")
 
     if CURRENT_OS == "Windows":
-        setup_windows(install_dir)
-    elif CURRENT_OS == "Linux":
-        setup_linux(install_dir)
+        shortcut = get_windows_start_menu() / f"{APP_ID}.lnk"
+        if shortcut.exists():
+            shortcut.unlink()
+            print(f"    + Removed: {shortcut}")
 
-    action_word = "Updated" if is_update else "Installed"
-    print(f"\n[+] Success! {APP_NAME} has been successfully {action_word}.")
-    print("[+] Press Enter to exit.")
-    input()   
+    elif CURRENT_OS == "Linux":
+        applications_dirs = {
+            get_linux_applications_dir(),
+            Path.home() / ".local" / "share" / "applications",
+        }
+
+        for applications_dir in applications_dirs:
+            desktop_file = applications_dir / f"{APP_ID}.desktop"
+            if desktop_file.exists():
+                desktop_file.unlink()
+                print(f"    + Removed: {desktop_file}")
+
+            update_database = shutil.which("update-desktop-database")
+            if update_database and applications_dir.exists():
+                subprocess.run(
+                    [update_database, str(applications_dir)],
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+
+
+def remove_installation(install_dir):
+    """Remove a complete FocusFinder installation directory."""
+
+    validate_install_location(install_dir)
+
+    if install_dir.is_symlink():
+        install_dir.unlink()
+    elif install_dir.exists():
+        shutil.rmtree(install_dir)
+
+    print(f"    + Removed installation directory: {install_dir}")
+
+# --------------------------------------------------
+# Confirmation
+# --------------------------------------------------
+
+def confirm_action(message):
+    """Require explicit confirmation for destructive operations."""
+
+    print()
+    print(message)
+    print("Type YES to continue.")
+    return input("> ").strip() == "YES"
+
+
+# --------------------------------------------------
+# Installation modes
+# --------------------------------------------------
+
+def finish_installation(install_dir):
+    """Install dependencies, create shortcuts and record the release version."""
+
+    install_package = install_dir / PACKAGE_NAME
+    venv_python, venv_pythonw = setup_venv(install_dir)
+    install_dependencies(venv_python, install_package)
+
+    if CURRENT_OS == "Windows":
+        setup_windows(install_package, venv_pythonw)
+    else:
+        setup_linux(install_package, venv_python)
+
+    save_installed_version(install_dir)
+
+
+def install_application(install_dir, reinstall=False):
+    """Perform a fresh installation, optionally removing the previous one."""
+
+    validate_source()
+    install_package = install_dir / PACKAGE_NAME
+
+    if SOURCE_DIR.resolve() == install_package.resolve():
+        raise RuntimeError(
+            "Run installer.py from the downloaded FocusPY folder, "
+            "not from the installed application."
+        )
+
+    if reinstall:
+        print("[*] Removing existing installation...")
+        remove_shortcuts()
+        remove_installation(install_dir)
+
+    install_dir.mkdir(parents=True, exist_ok=True)
+    copy_application(install_dir)
+    finish_installation(install_dir)
+
+
+def clean_update_application(old_install_dir):
+    """Rebuild the installation while preserving or wiping user data as configured."""
+
+    validate_source()
+    new_install_dir = get_install_dir()
+    old_package = old_install_dir / PACKAGE_NAME
+
+    if SOURCE_DIR.resolve() == old_package.resolve():
+        raise RuntimeError(
+            "Run installer.py from the downloaded FocusPY folder, "
+            "not from the installed application."
+        )
+
+    backup_dir = None
+
+    if not WIPE_USER_DATA:
+        backup_dir = Path(tempfile.mkdtemp(prefix="focusfinder-user-data-"))
+        backup_user_data(old_package, backup_dir)
+        print(f"[*] User data backed up temporarily: {backup_dir}")
+    else:
+        print("[!] WIPE_USER_DATA is enabled. No user data backup will be made.")
+
+    try:
+        remove_shortcuts()
+        remove_installation(old_install_dir)
+
+        new_install_dir.mkdir(parents=True, exist_ok=True)
+        copy_application(new_install_dir)
+
+        if backup_dir is not None:
+            restore_user_data(new_install_dir / PACKAGE_NAME, backup_dir)
+
+        finish_installation(new_install_dir)
+
+    except Exception:
+        if backup_dir is not None:
+            print("\n[!] The clean update did not finish successfully.")
+            print("[!] Your user-data backup has been retained at:")
+            print(f"    {backup_dir}")
+            print("[!] Do not delete that folder until your data has been recovered.")
+        raise
+
+    else:
+        if backup_dir is not None:
+            shutil.rmtree(backup_dir, ignore_errors=True)
+
+
+def update_application(install_dir):
+    """Update FocusFinder using the release's configured update strategy."""
+
+    validate_source()
+    install_package = install_dir / PACKAGE_NAME
+
+    if not install_package.is_dir():
+        raise FileNotFoundError(
+            "No existing FocusFinder installation was found.\n"
+            "Choose Install / Reinstall instead."
+        )
+
+    previous_version = get_installed_version(install_dir)
+    print(f"[*] Installed version: {previous_version}")
+    print(f"[*] New version: {VERSION}")
+    print()
+
+    if CLEAN_INSTALL:
+        print("[*] This release is configured for a clean installation.")
+        clean_update_application(install_dir)
+        return
+
+    install_package = copy_application(install_dir, preserve_data=True)
+    venv_python, venv_pythonw = setup_venv(install_dir)
+    install_dependencies(venv_python, install_package)
+
+    if CURRENT_OS == "Windows":
+        setup_windows(install_package, venv_pythonw)
+    else:
+        setup_linux(install_package, venv_python)
+
+    save_installed_version(install_dir)
+
+
+def uninstall_application(install_dir):
+    """Completely remove FocusFinder, including its application data folder."""
+
+    remove_shortcuts()
+
+    if install_dir.exists():
+        remove_installation(install_dir)
+    else:
+        print("[*] No installation directory was found.")
+
+    print("\n[+] FocusFinder has been uninstalled.")
+
+# --------------------------------------------------
+# Main menu
+# --------------------------------------------------
+
+def main():
+    print()
+    print("=" * 60)
+    print(f"             {DISPLAY_NAME} Installer")
+    print(f"             Version: {VERSION}")
+    print(f"             Operating system: {CURRENT_OS}")
+    print("=" * 60)
+
+    if CURRENT_OS not in ("Windows", "Linux"):
+        print("\n[!] This operating system is not supported.")
+        return 1
+
+    try:
+        validate_configuration()
+    except ValueError as error:
+        print(f"\n[!] RELEASE CONFIGURATION ERROR: {error}")
+        return 1
+
+    install_dir = get_existing_install_dir()
+    installed = install_dir.exists() and (install_dir / PACKAGE_NAME).is_dir()
+
+    # This check deliberately happens before the menu or any installation action.
+    if not check_installed_version(install_dir):
+        return 1
+
+    installed_version = get_installed_version(install_dir) if installed else "Not installed"
+
+    print()
+    print(f"Installation directory: {install_dir}")
+    print(f"Installed version: {installed_version}")
+    print()
+    print("-" * 60)
+    print("  1. Install / Reinstall")
+    print("  2. Update")
+    print("  3. Uninstall")
+    print("  4. Exit")
+    print("-" * 60)
+
+    try:
+        choice = input("\nSelect an option: ").strip()
+
+        if choice == "1":
+            if installed:
+                if not confirm_action(
+                    "This will completely remove the existing installation, "
+                    "including saved data inside its installation folder, "
+                    "before reinstalling.\n"
+                    "Type YES only if you are happy to proceed."
+                ):
+                    print("\n[*] Reinstallation cancelled.")
+                    return 0
+
+                install_application(install_dir, reinstall=True)
+            else:
+                install_application(get_install_dir())
+
+            print("\n" + "=" * 60)
+            print(f"[+] {DISPLAY_NAME} successfully installed!")
+            print(f"    Version: {VERSION}")
+            print(f"    Location: {get_install_dir()}")
+            print("    Launch it from your applications menu.")
+            print("=" * 60)
+
+        elif choice == "2":
+            if not installed:
+                print("\n[!] FocusFinder is not currently installed.")
+                print("[!] Choose Install / Reinstall instead.")
+                return 1
+
+            if CLEAN_INSTALL:
+                print("\n" + "=" * 60)
+                print("THIS UPDATE REQUIRES A CLEAN INSTALLATION")
+                print("=" * 60)
+                print("The existing application files and virtual environment will be removed.")
+
+                if WIPE_USER_DATA:
+                    describe_user_data_wipe()
+                    confirmation = (
+                        "\nWARNING: Your saved FocusFinder data will also be permanently "
+                        "deleted. This cannot be undone."
+                    )
+                else:
+                    print("\nYour recognised saved data will be backed up and restored.")
+                    confirmation = ""
+
+                if not confirm_action(
+                    "This update will rebuild FocusFinder from scratch."
+                    + confirmation
+                ):
+                    print("\n[*] Update cancelled. Nothing has been changed.")
+                    return 0
+
+                clean_update_application(install_dir)
+            else:
+                update_application(install_dir)
+
+            print("\n" + "=" * 60)
+            print(f"[+] {DISPLAY_NAME} successfully updated!")
+            print(f"    Version: {VERSION}")
+            if WIPE_USER_DATA:
+                print("    Saved application data was wiped as requested by this release.")
+            else:
+                print("    Recognised saved data has been preserved.")
+            print("=" * 60)
+
+        elif choice == "3":
+            if not confirm_action(
+                "This will permanently remove FocusFinder, including its "
+                "virtual environment, saved data and shortcuts."
+            ):
+                print("\n[*] Uninstallation cancelled.")
+                return 0
+
+            uninstall_application(install_dir)
+
+        elif choice == "4":
+            print("\n[*] Exiting installer.")
+            return 0
+
+        else:
+            print("\n[!] Invalid selection.")
+            return 1
+
+        return 0
+
+    except Exception as error:
+        print("\n" + "=" * 60)
+        print("[!] OPERATION FAILED")
+        print()
+        print(error)
+        print("=" * 60)
+        return 1
+
+
+# --------------------------------------------------
+# Entry point
+# --------------------------------------------------
+
+if __name__ == "__main__":
+    exit_code = main()
+
+    if sys.stdin.isatty():
+        input("\nPress Enter to exit...")
+
+    sys.exit(exit_code)
