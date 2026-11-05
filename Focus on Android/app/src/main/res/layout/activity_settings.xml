@@ -140,8 +140,7 @@
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
+            android:layout_height="50dp"
             android:orientation="horizontal">
 
             <CheckBox
@@ -154,6 +153,65 @@
                 android:textSize="20dp" />
 
         </LinearLayout>
+
+        <View
+            android:id="@+id/view5"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/separator" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:orientation="horizontal">
+
+            <CheckBox
+                android:id="@+id/checkBox3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:checked="false"
+                android:text="Use current location for weather"
+                android:textSize="20dp" />
+
+        </LinearLayout>
+
+        <View
+            android:id="@+id/view6"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/separator" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:orientation="horizontal">
+
+            <Spinner
+                android:id="@+id/spinner2"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:spinnerMode="dialog"
+                android:textSize="20dp"/>
+        </LinearLayout>
+
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/textView3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:drawableTint="@android:color/holo_orange_dark"
+            android:gravity="center"
+            android:text="Restart the app for changes to take effect"
+            android:textColor="@android:color/holo_orange_dark"
+            android:textSize="18dp"
+            android:visibility="gone"
+            app:drawableStartCompat="@android:drawable/stat_sys_warning" />
 
     </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

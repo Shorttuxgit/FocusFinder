@@ -34,6 +34,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
+import android.webkit.ValueCallback
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.AdapterView
@@ -430,7 +431,7 @@ class timetable_view
         rec.addItemDecoration(did);
         rec.adapter = adapt;
     }
-    fun set_info(ev: timetable_event, s : ArrayList<String>)
+    fun set_info(ev: timetable_event, s : ArrayList<String>, v : Boolean)
     {
         var str_b = sdfmt.format(ev.time_start.getTime());
         var str_a = sdfmt.format(ev.time_end.getTime());
@@ -442,26 +443,33 @@ class timetable_view
         vtitle.text = "${ev.title}";
         vstaff.text = "staff: ${ev.staff}";
 
+
+        val cl = rec.context.resources.getColor(com.google.android.material.R.color.material_dynamic_primary10);
+
         if(ev.title == "Study Period" || ev.title == "Personal Development")
-            layout.setBackgroundColor(Color.argb(0xFF, 0x1E, 0x20, 0x04));
+            layout.setBackgroundColor(cl);
         else
             layout.setBackgroundColor(Color.TRANSPARENT);
 
-        if(ev.title == "Study Period" || ev.title == "Personal Development")
+        if(!v)
         {
-            adapt.list.clear();
-            adapt.list.addAll(s);
-
-            Log.println(Log.DEBUG, "ma", "list $s, ${s.size}");
-
-            adapt.notifyDataSetChanged();
+            rec.visibility = View.GONE;
         }
-        else
-        {
-            val ln = adapt.list.count();
-            adapt.list.clear();
-            if(ln>0)
-                adapt.notifyItemRangeRemoved(0, ln);
+        else {
+
+            if (ev.title == "Study Period" || ev.title == "Personal Development") {
+                adapt.list.clear();
+                adapt.list.addAll(s);
+
+                Log.println(Log.DEBUG, "ma", "list $s, ${s.size}");
+
+                adapt.notifyDataSetChanged();
+            } else {
+                val ln = adapt.list.count();
+                adapt.list.clear();
+                if (ln > 0)
+                    adapt.notifyItemRangeRemoved(0, ln);
+            }
         }
     }
 }
@@ -482,8 +490,9 @@ class focus_inject
     @JavascriptInterface
     fun handle_user(user : String)
     {
-        focus_m.person_name = user.removePrefix("Welcome Back, ");
-        Log.println(Log.DEBUG, "dbg", "got username ${focus_m.person_name}");
+        val ruser = user.replace('"', ' ');
+        focus_m.person_name = ruser.trim().removePrefix("Welcome Back, ");
+        Log.println(Log.DEBUG, "dbg", "got username ${focus_m.person_name} raw ${user} proc ${ruser}");
     }
 }
 abstract class gesture_swipe : View.OnTouchListener
@@ -532,28 +541,91 @@ abstract class gesture_swipe : View.OnTouchListener
             }
             return result;
         }
+
+        override fun onDown(e: MotionEvent): Boolean {
+            onClick(e);
+            return true;
+        }
     }
     abstract fun onSwipeLeft();
     abstract fun onSwipeRight();
     abstract fun onDoubleClick();
+    abstract fun onClick(e : MotionEvent);
+}
+class weather_view(var visibility : TextView, var precipitation : TextView, var time : TextView, var icon : ImageView, var temp : TextView)
+{
+    var sdfmt = SimpleDateFormat("HH:mm");
+    fun render(wh: weather_hour)
+    {
+        visibility.text = "${wh.visibility.toInt()} m";
+        precipitation.text = String.format("%.2f mm", wh.rainp);
+        time.text = sdfmt.format(wh.time.time);
+        icon.setImageDrawable(wh.wdraw);
+        temp.text = "${wh.temp}°C";
+    }
+}
+class weather_hour
+{
+    var temp : Double;
+    var rainp : Double;
+    var wdraw : Drawable;
+    var is_day : Boolean;
+    var wcode : Int;
+    var visibility : Double;
+    var time : GregorianCalendar;
+    constructor(t : Double, wb : Drawable, ranp : Double, is_dy : Boolean, wc : Int, v : Double, t2 : GregorianCalendar)
+    {
+        temp = t;
+        wdraw = wb;
+        rainp = ranp;
+        is_day = is_dy;
+        wcode = wc;
+        visibility = v;
+        time = t2;
+    }
+    fun is_raining() : Boolean
+    {
+        return (rainp > 0.01);
+    }
 }
 class weather_day
 {
     var min_temp : Double;
     var max_temp : Double;
-    var wdraw : Drawable;
+    var wdraw : Drawable?;
     var rainp : Double;
     var is_day : Boolean;
     var today : Boolean;
 
-    constructor(mt : Double, mxt : Double, wb : Drawable, ranp : Double, is_dy : Boolean, t : Boolean)
+    var time = arrayOfNulls<weather_hour>(16-8 + 1);
+    constructor()
     {
+        min_temp = 0.0;
+        max_temp = 0.0;
+        wdraw = null;
+        rainp = 0.0;
+        is_day = false;
+        today = false;
+    }
+
+    fun initialise(td : Boolean, isd : Boolean, fc: focus_main)//mt : Double, mxt : Double, wb : Drawable, ranp : Double, is_dy : Boolean, t : Boolean)
+    {
+        //val wb = fc.weather_hours_to_draw(time);
+        val (wb, mt, mxt, ranp) = fc.weather_hours_to_data(time);
         min_temp = mt;
         max_temp = mxt;
         wdraw = wb;
         rainp = ranp;
-        is_day = is_dy;
-        today = t;
+        if(td)
+            is_day = isd;
+        today = td;
+    }
+    fun add_wentry(wh : weather_hour, hour : Int)
+    {
+        if(hour < 8 || hour > 16)
+            return;
+        val nh = hour - 8;
+        time[nh] = wh;
     }
     fun is_raining() : Boolean
     {
@@ -738,6 +810,7 @@ class focus_main : AppCompatActivity() {
     var days = arrayOfNulls<timetable_day>(6);
     var wdays = arrayOfNulls<weather_day>(7);
     var views = arrayOfNulls<timetable_view>(4);
+    var wviews = arrayOfNulls<weather_view>(9);
     var lbody : String? = null;
     var web_view : WebView? = null;
     var person_name : String? = null;
@@ -753,6 +826,9 @@ class focus_main : AppCompatActivity() {
     var shared_prefs : SharedPreferences? = null;
     var weather : Boolean = true;
     var hide_friends : Boolean = false;
+    var weather_locale = false;
+    var dweather_hash = Hashtable<Int, Drawable>();
+    var current_temp : Double = 0.0;
     val cache_observer : Observer<List<week_cached>> = Observer<List<week_cached>> { week_caches ->
 
         if(unloaded.getAndSet(false)) {
@@ -842,7 +918,7 @@ class focus_main : AppCompatActivity() {
                 if(dy.events[i]!!.title == "Study Period" || dy.events[i]!!.title == "Personal Development")
                     s += friends[j].person_name;
             }
-            views[i]?.set_info(day?.events[i]!!, s);
+            views[i]?.set_info(day?.events[i]!!, s, !hide_friends);
         }
         update_weather_day();
     }
@@ -960,6 +1036,131 @@ class focus_main : AppCompatActivity() {
         Log.println(Log.DEBUG, "tg", "compressed day:   ${output}");
         Log.println(Log.DEBUG, "tg", "uncompressed day: ${final.toString()}");
     }
+    fun forecast_update_texts()
+    {
+        val tview = findViewById<TextView>(R.id.view8);
+        var dm = date.get(Calendar.DAY_OF_MONTH);
+        val sdfmt = day_to_sdfmt(dm);
+        val s = sdfmt.format(date.getTime());
+        tview.text = s;
+
+        var d = date.get(Calendar.DAY_OF_WEEK) - 2;
+        if(d < 0)
+            d = 6;
+        var weekd = wdays[d];
+        if(weekd == null) {
+            var iview = findViewById<ImageView>(R.id.imageView2);
+            iview.visibility = View.GONE;
+            var weahter = findViewById<TextView>(R.id.weahter2);
+            weahter.visibility = View.GONE;
+            return;
+        }
+
+        var weahter = findViewById<TextView>(R.id.weahter2);
+        weahter.visibility = View.VISIBLE;
+        var sst : String = "";
+        sst += String.format("${current_temp}°C at %.1f,%.1f", latt, longt);
+        weahter.text = sst;
+        var iview = findViewById<ImageView>(R.id.imageView2);
+        iview.visibility = View.VISIBLE;
+        iview.setImageDrawable(weekd.wdraw);
+
+        for(i in 0 until 9)
+        {
+            wviews[i]!!.render(weekd.time[i]!!);
+        }
+    }
+    fun day_to_sdfmt(dm : Int) : SimpleDateFormat
+    {
+        var sdfmt = when (dm % 10) {
+            1 -> sdfmt1;
+            2 -> sdfmt2;
+            3 -> sdfmt3;
+            else -> {
+                sdfmt4; }
+        }
+        if (dm >= 11 && dm <= 13)
+            sdfmt = sdfmt4;
+        return sdfmt;
+    }
+    @SuppressLint("ClickableViewAccessibility")
+    fun forecast_update()
+    {
+        wviews[0] = weather_view(findViewById<TextView>(R.id.wvdata1), findViewById<TextView>(R.id.wpdata1), findViewById<TextView>(R.id.wddata1), findViewById<ImageView>(R.id.wicon1), findViewById<TextView>(R.id.wtdata1));
+        wviews[1] = weather_view(findViewById<TextView>(R.id.wvdata2), findViewById<TextView>(R.id.wpdata2), findViewById<TextView>(R.id.wddata2), findViewById<ImageView>(R.id.wicon2), findViewById<TextView>(R.id.wtdata2));
+        wviews[2] = weather_view(findViewById<TextView>(R.id.wvdata3), findViewById<TextView>(R.id.wpdata3), findViewById<TextView>(R.id.wddata3), findViewById<ImageView>(R.id.wicon3), findViewById<TextView>(R.id.wtdata3));
+        wviews[3] = weather_view(findViewById<TextView>(R.id.wvdata4), findViewById<TextView>(R.id.wpdata4), findViewById<TextView>(R.id.wddata4), findViewById<ImageView>(R.id.wicon4), findViewById<TextView>(R.id.wtdata4));
+        wviews[4] = weather_view(findViewById<TextView>(R.id.wvdata5), findViewById<TextView>(R.id.wpdata5), findViewById<TextView>(R.id.wddata5), findViewById<ImageView>(R.id.wicon5), findViewById<TextView>(R.id.wtdata5));
+        wviews[5] = weather_view(findViewById<TextView>(R.id.wvdata6), findViewById<TextView>(R.id.wpdata6), findViewById<TextView>(R.id.wddata6), findViewById<ImageView>(R.id.wicon6), findViewById<TextView>(R.id.wtdata6));
+        wviews[6] = weather_view(findViewById<TextView>(R.id.wvdata7), findViewById<TextView>(R.id.wpdata7), findViewById<TextView>(R.id.wddata7), findViewById<ImageView>(R.id.wicon7), findViewById<TextView>(R.id.wtdata7));
+        wviews[7] = weather_view(findViewById<TextView>(R.id.wvdata8), findViewById<TextView>(R.id.wpdata8), findViewById<TextView>(R.id.wddata8), findViewById<ImageView>(R.id.wicon8), findViewById<TextView>(R.id.wtdata8));
+        wviews[8] = weather_view(findViewById<TextView>(R.id.wvdata9), findViewById<TextView>(R.id.wpdata9), findViewById<TextView>(R.id.wddata9), findViewById<ImageView>(R.id.wicon9), findViewById<TextView>(R.id.wtdata9));
+
+        val rref = findViewById<Button>(R.id.ashare2);
+        rref.setOnClickListener {
+            setContentView(R.layout.activity_settings);
+            settings_update();
+        }
+
+        val button2 = findViewById<Button>(R.id.abutton2);
+        val button1 = findViewById<Button>(R.id.abutton);
+        val button3 = findViewById<Button>(R.id.abutton3);
+        var scv = findViewById<ScrollView>(R.id.scroll_view3);
+
+        val exb = findViewById<Button>(R.id.share7);
+        exb.setOnClickListener {
+            init_login_nt();
+            ui_timetable();
+        }
+
+        button2.setOnClickListener {
+            if (date.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
+                date.add(Calendar.DATE, -1);
+                forecast_update_texts();
+            }
+        }
+        button1.setOnClickListener {
+            if (date.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
+                date.add(Calendar.DATE, 1);
+                forecast_update_texts();
+            }
+        }
+        button3.setOnClickListener {
+            val tst = GregorianCalendar();
+            date.set(Calendar.DAY_OF_WEEK, tst.get(Calendar.DAY_OF_WEEK));
+            forecast_update_texts();
+        }
+
+        scv.setOnTouchListener(object : gesture_swipe(this) {
+            override fun onClick(e: MotionEvent) {
+                if(e.x < scv.width/8)
+                    onSwipeRight();
+                else if(e.x > (scv.width*7) / 8)
+                    onSwipeLeft();
+            }
+            override fun onSwipeRight() {
+                if (date.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
+                    date.add(Calendar.DATE, -1);
+                    forecast_update_texts();
+                }
+            }
+
+            override fun onDoubleClick() {
+                val tst = GregorianCalendar();
+                date.set(Calendar.DAY_OF_WEEK, tst.get(Calendar.DAY_OF_WEEK));
+                forecast_update_texts();
+            }
+
+            override fun onSwipeLeft() {
+                if (date.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
+                    date.add(Calendar.DATE, 1);
+                    forecast_update_texts();
+                }
+            }
+        })
+
+        forecast_update_texts();
+    }
     fun settings_update()
     {
         val exb = findViewById<Button>(R.id.share3);
@@ -995,6 +1196,67 @@ class focus_main : AppCompatActivity() {
             }
             hide_friends = isc;
         }
+        val warn_b = findViewById<TextView>(R.id.textView3);
+        val w2box = findViewById<CheckBox>(R.id.checkBox3);
+        w2box.isChecked = weather_locale;
+        w2box.setOnClickListener {
+            val isc = w2box.isChecked;
+            if(isc != weather_locale)
+                warn_b.visibility = View.VISIBLE;
+            else
+                warn_b.visibility = View.GONE;
+
+            with(shared_prefs?.edit()!!)
+            {
+                putBoolean("weather_locale", isc);
+                apply();
+            }
+
+        }
+
+        val spnr = findViewById<Spinner>(R.id.spinner2);
+        spnr.setSelection(0);
+        val items : ArrayList<String> = ArrayList<String>(friends.size+1);
+        for(i in 0 until friends.size+1)
+        {
+            if(i == friends.size)
+                items.add("Delete a friends timetable data");
+            else
+                items.add("${friends[i].person_name!!}'s timetable");
+        }
+        var aa = ArrayAdapter<String>(this, R.layout.spinner_layout, items);
+        aa.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spnr.adapter = aa;
+        spnr.setSelection(items.size-1);
+
+        spnr.post {
+            spnr.onItemSelectedListener = object : OnItemSelectedListener {
+                override fun onItemSelected(
+                    p0: AdapterView<*>?,
+                    p1: View?,
+                    p2: Int,
+                    p3: Long
+                ) {
+                    if(p2 == items.size-1)
+                        return;
+
+                    spnr.setSelection(items.size-1);
+
+                    items.removeAt(p2);
+
+                    aa.notifyDataSetChanged();
+
+                    spnr.setSelection(items.size-1);
+                    unloaded.set(false);
+                    cache_view?.delete_of(friends[p2].person_name);
+                    friends.removeAt(p2);
+                }
+
+                override fun onNothingSelected(p0: AdapterView<*>?) {
+
+                }
+            }
+        }
     }
     @SuppressLint("ClickableViewAccessibility")
     fun ui_timetable()
@@ -1015,6 +1277,11 @@ class focus_main : AppCompatActivity() {
             var rref = findViewById<Button>(R.id.share2);
             var spn = findViewById<Spinner>(R.id.spinner);
             var vsp = findViewById<LinearLayout>(R.id.wther);
+            var fcst = findViewById<Button>(R.id.share6);
+            if(!weather)
+                fcst.visibility = View.GONE;
+            else
+                fcst.visibility = View.VISIBLE;
             spn.setSelection(cur_selced+1);
             if(hide_friends)
                 spn.visibility = View.GONE;
@@ -1081,6 +1348,10 @@ class focus_main : AppCompatActivity() {
                 setContentView(R.layout.activity_settings);
                 settings_update();
             }
+            fcst.setOnClickListener {
+                setContentView(R.layout.activity_weather);
+                forecast_update();
+            }
             //rref.setOnClickListener {
             //    cache_view?.clear_all();
             //    friends.clear();
@@ -1140,6 +1411,12 @@ class focus_main : AppCompatActivity() {
                 update_texts();
             }
             scv.setOnTouchListener(object : gesture_swipe(this) {
+                override fun onClick(e: MotionEvent) {
+                    if(e.x < scv.width/8)
+                        onSwipeRight();
+                    else if(e.x > (scv.width*7) / 8)
+                        onSwipeLeft();
+                }
                 override fun onSwipeRight() {
                     if (date.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
                         date.add(Calendar.DATE, -1);
@@ -1289,6 +1566,46 @@ class focus_main : AppCompatActivity() {
 
         ui_timetable();
     }
+    data class weather_data(var a1 : Drawable, var a2 : Double, var a3 : Double, var a4 : Double);
+    fun weather_hours_to_data(wh : Array<weather_hour?>) : weather_data
+    {
+        var code : Drawable? = null;
+        var mtemp : Double = Double.MAX_VALUE;
+        var mxtemp : Double = -Double.MAX_VALUE;
+        var ps : Double = 0.0;
+        var _prio = -1;
+        for(i in 0 until wh.size)
+        {
+            val prio = when(wh[i]!!.wcode)
+            {
+                95, 96, 99 -> 9;
+                85, 86 -> 8;
+                in 70 .. 77 -> 8;
+                56, 57, 66, 67 -> 7;
+                63, 65 -> 6;
+                82 -> 5;
+                61, 81 -> 4;
+                51, 53, 55, 80 -> 3;
+                in 40..48 -> 2;
+                1, 2, 3 -> 1;
+                0 -> 0;
+                else -> {
+                    0;
+                }
+            }
+            if(prio > _prio)
+            {
+                _prio = prio;
+                code = wh[i]!!.wdraw;
+            }
+            if(mxtemp < wh[i]!!.temp)
+                mxtemp = wh[i]!!.temp;
+            if(mtemp > wh[i]!!.temp)
+                mtemp = wh[i]!!.temp;
+            ps += wh[i]!!.rainp;
+        }
+        return weather_data(code!!, mtemp, mxtemp, ps);
+    }
     fun weather_code_to_url(weather_code : Int, is_day : Boolean) : String
     {
         return when (weather_code) {
@@ -1336,15 +1653,22 @@ class focus_main : AppCompatActivity() {
     }
     fun load_weather_days(obj : JSONObject)
     {
-        var daily = obj.getJSONObject("daily");
+        //var daily = obj.getJSONObject("daily");
+        var hourly = obj.getJSONObject("hourly");
         var current = obj.getJSONObject("current");
-        var time = daily.getJSONArray("time");
-        var wcode = daily.getJSONArray("weather_code");
-        var atemp_max = daily.getJSONArray("apparent_temperature_max");
-        var atemp_min = daily.getJSONArray("apparent_temperature_min");
-        var rain_s = daily.getJSONArray("rain_sum");
+        var time = hourly.getJSONArray("time");
+        var wcode = hourly.getJSONArray("weather_code");
+        var atemp = hourly.getJSONArray("apparent_temperature");
+        var isd = hourly.getJSONArray("is_day");
+        var vis = hourly.getJSONArray("visibility");
+        //var atemp_min = daily.getJSONArray("apparent_temperature_min");
+        var rain = hourly.getJSONArray("precipitation");
 
-        var hash_v = Hashtable<Int, Drawable>();
+        for(i in 0 until 7)
+            wdays[i] = weather_day();
+
+        val is_day = current.getInt("is_day") != 0;
+        current_temp = current.getDouble("apparent_temperature");
 
         for(i in 0 until time.length())
         {
@@ -1359,21 +1683,26 @@ class focus_main : AppCompatActivity() {
                     greg.get((Calendar.DAY_OF_WEEK))-2;
                 }
             }
+            val hour_idx : Int = greg.get(Calendar.HOUR_OF_DAY);
+            if(hour_idx !in 8..16)
+                continue;
 
             Log.println(Log.DEBUG, "tg", "day_idx: ${day_idx}, ${greg.get(Calendar.DAY_OF_WEEK)}, ${tm}, ${day.day}");
 
             var weather_code = wcode.getInt(i);
-            var temp_min = atemp_min.getDouble(i);
-            var temp_max = atemp_max.getDouble(i);
-            var rains = rain_s.getDouble(i);
+            var temp = atemp.getDouble(i);
+            var vi = vis.getDouble(i);
+            //var temp_min = atemp_min.getDouble(i);
+            //var temp_max = atemp_max.getDouble(i);
+            var rains = rain.getDouble(i);
             var is_day = true;
             var bitmap : Drawable? = null;
 
-            if(greg.get(Calendar.DAY_OF_WEEK)==(GregorianCalendar()).get(Calendar.DAY_OF_WEEK))
-                is_day = current.getInt("is_day") != 0;
+            //if(greg.get(Calendar.DAY_OF_WEEK)==(GregorianCalendar()).get(Calendar.DAY_OF_WEEK))
+            is_day = isd.getInt(i) != 0;
 
-            if(hash_v[weather_code + (if (is_day) (256) else (0))] != null)
-                bitmap = hash_v[weather_code + (if (is_day) (256) else (0))]!!;
+            if(dweather_hash[weather_code + (if (is_day) (256) else (0))] != null)
+                bitmap = dweather_hash[weather_code + (if (is_day) (256) else (0))]!!;
 
             if(bitmap == null)
             {
@@ -1402,14 +1731,23 @@ class focus_main : AppCompatActivity() {
                     //var bm_img: Bitmap = SVg.decodeStream(getInputStream());
                     //bitmap = bm_img;
                     //Log.println(Log.DEBUG, "tag", "dw: ${bitmap}");
-                    hash_v[weather_code + (if (is_day) (256) else (0))] = bitmap!!;
+                    dweather_hash[weather_code + (if (is_day) (256) else (0))] = bitmap;
                 }
                 Log.println(Log.DEBUG, "tag","weather_code: ${weather_code}, url: ${url}");
             }
 
-            wdays[day_idx] = weather_day(temp_min, temp_max, bitmap!!, rains, is_day,greg.get(Calendar.DAY_OF_WEEK)==(GregorianCalendar()).get(Calendar.DAY_OF_WEEK));
+            //wdays[day_idx].initialise();
+            wdays[day_idx]!!.add_wentry(weather_hour(temp, bitmap!!, rains, is_day, weather_code, vi, greg), hour_idx);
+            //wdays[day_idx] = weather_day(temp_min, temp_max, bitmap!!, rains, is_day,greg.get(Calendar.DAY_OF_WEEK)==(GregorianCalendar()).get(Calendar.DAY_OF_WEEK));
         }
-
+        for(i in 0 until 7) {
+            val d = when(i)
+            {
+                6 -> 1;
+                else -> i + 2;
+            }
+            wdays[i]!!.initialise(d == (GregorianCalendar()).get(Calendar.DAY_OF_WEEK), is_day, this);
+        }
     }
     data class fuck_you_kotlin(var d : Double);
     fun get_long_lat_ip(long : fuck_you_kotlin, lat : fuck_you_kotlin)
@@ -1439,6 +1777,8 @@ class focus_main : AppCompatActivity() {
     }
     fun get_long_lat_fixed(long : fuck_you_kotlin, lat : fuck_you_kotlin) : Boolean
     {
+        if(weather_locale)
+            return false;
         long.d = -1.3660916585283378;
         lat.d = 50.96210550753733;
         return true;
@@ -1503,7 +1843,7 @@ class focus_main : AppCompatActivity() {
                 gc.add(Calendar.WEEK_OF_YEAR, 1);
                 var send = sdfm.format(gc.time);
 
-                url = URL("https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weather_code,apparent_temperature_max,apparent_temperature_min,rain_sum&current=is_day&timezone=auto&timeformat=unixtime&start_date=${sbeg}&end_date=${send}");
+                url = URL("https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&hourly=weather_code,apparent_temperature,precipitation,is_day,visibility&current=is_day,apparent_temperature&timezone=auto&timeformat=unixtime&start_date=${sbeg}&end_date=${send}");
                 Log.println(Log.DEBUG, "tg", "url: ${url.toURI()}");
                 with(url.openConnection() as HttpsURLConnection)
                 {
@@ -1710,7 +2050,9 @@ class focus_main : AppCompatActivity() {
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web_view!!, true);
 
-        web_view!!.addJavascriptInterface(focus_inject(this), "AndroidFocusInjection");
+        val fi = focus_inject(this);
+
+        web_view!!.addJavascriptInterface(fi, "AndroidFocusInjection");
 
         web_view!!.webViewClient = object : WebViewClient()
         {
@@ -1722,15 +2064,25 @@ class focus_main : AppCompatActivity() {
                     return;
 
                 Log.println(Log.DEBUG, "dbg2", "Got ON PAGE STARTED");
-                view?.evaluateJavascript("(function() {const original_fetch = window.fetch; window.fetch = async (...args) => {const [url, options] = args; const response = await original_fetch(...args); if(options && options.method && options.method == 'POST') { try {const c = response.clone(); const url = c.url; const body = await c.text(); AndroidFocusInjection.handle_post(url, body); } catch (e) {} } return response; }; } )();", null);
+                view?.evaluateJavascript("(function() { const original_fetch = window.fetch; window.fetch = async (...args) => { const [url, options] = args; const response = await original_fetch(...args); if(options && options.method && options.method == 'POST' && url.includes(\"livewire\")) { try { const c = response.clone(); const url = c.url; const body = await c.text(); window.localStorage.setItem(\"focus_inject_data\", body); window.location.href = url.substring(0, url.lastIndexOf(\"/\")) + \"/exams\"; } catch (e) { throw e; } } return response; }; })();", null);
             }
             override fun onPageFinished(view : WebView?, url : String?)
             {
                 super.onPageFinished(view, url);
                 if(url == null)
                     return;
-                if(!url.contains("home") || !url.contains("focus"))
+                if(!url.contains("home") || !url.contains("focus")) {
+                    Log.println(Log.DEBUG, "url: ", "$url");
+                    if(!url.contains("exams"))
+                        return;
+                    view?.evaluateJavascript("(function(){let return_val = \"\"; try { return_val = localStorage.getItem(\"focus_inject_data\"); } catch(e) {throw e;} return return_val; })();", object : ValueCallback<String?> {
+                        override fun onReceiveValue(p0: String?) {
+                            val ustring = org.json.JSONTokener(p0).nextValue() as String
+                            fi.handle_post(url, ustring);
+                        }
+                    })
                     return;
+                }
 
 
                 var url_got = url;
@@ -1741,7 +2093,12 @@ class focus_main : AppCompatActivity() {
                 if(idx < 0)
                     return;
 
-                view?.evaluateJavascript("(function(){try { const welcome_string = document.getElementsByClassName(\"text-3xl font-bold\")[0].textContent.trim(); AndroidFocusInjection.handle_user(welcome_string); } catch(e) {} })();", null);
+                view?.evaluateJavascript("(function(){let return_val = \"\"; try { const welcome_string = document.getElementsByClassName(\"text-3xl font-bold\")[0].textContent.trim(); return_val = welcome_string; } catch(e) {} return return_val;})();", object : ValueCallback<String?> {
+                    override fun onReceiveValue(p0: String?) {
+                        Log.println(Log.DEBUG, "onrecieve", "rec ${p0}");
+                        fi.handle_user(p0!!);
+                    }
+                });
 
                 var url_timetable = url.subSequence(0, idx+1).toString() + "timetable";
                 Log.println(Log.DEBUG, "dbg", url_timetable);
@@ -1975,6 +2332,7 @@ class focus_main : AppCompatActivity() {
 
         weather = shared_prefs?.getBoolean("weather_enabled", true)!!;
         hide_friends = shared_prefs?.getBoolean("hide_friends", false)!!;
+        weather_locale = shared_prefs?.getBoolean("weather_locale", false)!!;
 
         setContentView(R.layout.activity_focus_main)
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
