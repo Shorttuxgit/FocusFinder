@@ -104,10 +104,16 @@ import javax.net.ssl.HttpsURLConnection
 import kotlin.concurrent.thread
 import kotlin.math.abs
 
+fun create_gregorian() : GregorianCalendar
+{
+    val gc = GregorianCalendar(Locale("en", "GB"));
+    //gc.firstDayOfWeek = Calendar.MONDAY;
+    return gc;
+}
 class timetable_event
 {
-    var time_start : GregorianCalendar = GregorianCalendar();
-    var time_end : GregorianCalendar = GregorianCalendar();
+    var time_start : GregorianCalendar = create_gregorian();
+    var time_end : GregorianCalendar = create_gregorian();
     var title = "";
     var room = "";
     var staff = "";
@@ -197,8 +203,8 @@ class timetable_day
                 var ts_date = (desc_sdfmt.parse(ts));
                 var te_date = (desc_sdfmt.parse(te));
 
-                var time_start = GregorianCalendar();
-                var time_end = GregorianCalendar();
+                var time_start = create_gregorian();
+                var time_end = create_gregorian();
 
                 time_start.time = ts_date;
                 time_end.time = te_date;
@@ -244,8 +250,8 @@ class timetable_day
                 var ts_date = (desc_sdfmt.parse(ts));
                 var te_date = (desc_sdfmt.parse(te));
 
-                var time_start = GregorianCalendar();
-                var time_end = GregorianCalendar();
+                var time_start = create_gregorian();
+                var time_end = create_gregorian();
 
                 time_start.time = ts_date;
                 time_end.time = te_date;
@@ -800,7 +806,7 @@ class timetable_friend
     }
 }
 class focus_main : AppCompatActivity() {
-    var date : GregorianCalendar = GregorianCalendar();
+    var date : GregorianCalendar = create_gregorian();
     var cookies : String? = null;
     var sdfmt4 : SimpleDateFormat = SimpleDateFormat("EEEE, d'th' MMMM yyyy");
     var sdfmt3 : SimpleDateFormat = SimpleDateFormat("EEEE, d'rd' MMMM yyyy");
@@ -837,7 +843,7 @@ class focus_main : AppCompatActivity() {
             val calendar = Calendar.getInstance(Locale.getDefault())
             val firstDayInt = calendar.getFirstDayOfWeek()
 
-            var gcur = GregorianCalendar();
+            var gcur = create_gregorian();
             var week_id = gcur.get(Calendar.WEEK_OF_YEAR);
             if (gcur.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY && firstDayInt == Calendar.SUNDAY)
                 week_id--;
@@ -863,7 +869,7 @@ class focus_main : AppCompatActivity() {
                 person_name = week.name;
                 cur_selced = -1;
                 val udate = date;
-                date = GregorianCalendar();
+                date = create_gregorian();
                 date.timeInMillis = week.day_cached*24*60*60*1000;
                 date.set(Calendar.DAY_OF_WEEK, udate.get(Calendar.DAY_OF_WEEK));
 
@@ -906,10 +912,10 @@ class focus_main : AppCompatActivity() {
                     break;
                 if(day?.events[i]!!.title != "Study Period" && day.events[i]!!.title != "Personal Development")
                     break;
-                var gc : GregorianCalendar = GregorianCalendar();
+                var gc : GregorianCalendar = create_gregorian();
                 gc.timeInMillis = friends[j].day_time*24*60*60*1000;
                 gc.set(Calendar.DAY_OF_WEEK, date.get(Calendar.DAY_OF_WEEK));
-                var dt : GregorianCalendar = GregorianCalendar();
+                var dt : GregorianCalendar = create_gregorian();
                 dt.timeInMillis = (date.timeInMillis/1000/60/60/24) * 24*60*60*1000;
                 //Log.println(Log.DEBUG, "ttt", "${dt.timeInMillis} ?= ${gc.timeInMillis}");
                 if(gc.timeInMillis != dt.timeInMillis)
@@ -1126,7 +1132,8 @@ class focus_main : AppCompatActivity() {
             }
         }
         button3.setOnClickListener {
-            val tst = GregorianCalendar();
+            val tst = create_gregorian();
+            tst.firstDayOfWeek = Calendar.MONDAY;
             date.set(Calendar.DAY_OF_WEEK, tst.get(Calendar.DAY_OF_WEEK));
             forecast_update_texts();
         }
@@ -1146,7 +1153,7 @@ class focus_main : AppCompatActivity() {
             }
 
             override fun onDoubleClick() {
-                val tst = GregorianCalendar();
+                val tst = create_gregorian();
                 date.set(Calendar.DAY_OF_WEEK, tst.get(Calendar.DAY_OF_WEEK));
                 forecast_update_texts();
             }
@@ -1394,7 +1401,7 @@ class focus_main : AppCompatActivity() {
                 }
             }
             button3.setOnClickListener {
-                val tst = GregorianCalendar();
+                val tst = create_gregorian();
                 date.set(Calendar.DAY_OF_WEEK, tst.get(Calendar.DAY_OF_WEEK));
                 var dm = date.get(Calendar.DAY_OF_MONTH);
                 var sdfmt = when (dm % 10) {
@@ -1437,7 +1444,7 @@ class focus_main : AppCompatActivity() {
                 }
 
                 override fun onDoubleClick() {
-                    val tst = GregorianCalendar();
+                    val tst = create_gregorian();
                     date.set(Calendar.DAY_OF_WEEK, tst.get(Calendar.DAY_OF_WEEK));
                     var dm = date.get(Calendar.DAY_OF_MONTH);
                     var sdfmt = when (dm % 10) {
@@ -1493,8 +1500,8 @@ class focus_main : AppCompatActivity() {
             var clean_start : String;
             var clean_end : String;
 
-            var dt_start : GregorianCalendar = GregorianCalendar();
-            var dt_end : GregorianCalendar = GregorianCalendar();
+            var dt_start : GregorianCalendar = create_gregorian();
+            var dt_end : GregorianCalendar = create_gregorian();
 
             var day = 0;
 
@@ -1540,7 +1547,7 @@ class focus_main : AppCompatActivity() {
         date = days[0]!!.events[0]!!.time_start;
         date.set(Calendar.DAY_OF_WEEK, udate.get(Calendar.DAY_OF_WEEK));
 
-        val g : GregorianCalendar = GregorianCalendar();
+        val g : GregorianCalendar = create_gregorian();
         var wlist : week_day_list = week_day_list(emptyList());
         for(i in 0 until 6)
         {
@@ -1674,7 +1681,7 @@ class focus_main : AppCompatActivity() {
         {
             var tm = time.getLong(i);
             var day = Date(tm*1000);
-            var greg = GregorianCalendar();
+            var greg = create_gregorian();
             greg.time = day;
             val day_idx : Int = when(greg.get(Calendar.DAY_OF_WEEK))
             {
@@ -1746,7 +1753,7 @@ class focus_main : AppCompatActivity() {
                 6 -> 1;
                 else -> i + 2;
             }
-            wdays[i]!!.initialise(d == (GregorianCalendar()).get(Calendar.DAY_OF_WEEK), is_day, this);
+            wdays[i]!!.initialise(d == (create_gregorian()).get(Calendar.DAY_OF_WEEK), is_day, this);
         }
     }
     data class fuck_you_kotlin(var d : Double);
@@ -1832,7 +1839,7 @@ class focus_main : AppCompatActivity() {
                 latt = latitude;
 
                 Log.println(Log.DEBUG, "tg", "long ${longitude}, lat ${latitude}");
-                val gc : GregorianCalendar = GregorianCalendar();
+                val gc : GregorianCalendar = create_gregorian();
                 gc.time = date.time;
                 gc.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY);
 
@@ -2184,7 +2191,7 @@ class focus_main : AppCompatActivity() {
         self_person = false;
         person_name = friend.person_name;
 
-        val greg = GregorianCalendar();
+        val greg = create_gregorian();
         greg.timeInMillis = friend.day_time * 24 * 60 * 60 * 1000;
 
         greg.set(Calendar.DAY_OF_WEEK, date.get(Calendar.DAY_OF_WEEK));
@@ -2222,7 +2229,7 @@ class focus_main : AppCompatActivity() {
             person_name = name_fr;
 
             val day_milis = day_id*1000*60*60*24;
-            val greg = GregorianCalendar();
+            val greg = create_gregorian();
             greg.timeInMillis = day_milis;
 
             greg.set(Calendar.DAY_OF_WEEK, date.get(Calendar.DAY_OF_WEEK));
@@ -2287,7 +2294,7 @@ class focus_main : AppCompatActivity() {
         val calendar = Calendar.getInstance(Locale.getDefault())
         val firstDayInt = calendar.getFirstDayOfWeek()
 
-        var gcur = GregorianCalendar();
+        var gcur = create_gregorian();
         var week_id = gcur.get(Calendar.WEEK_OF_YEAR);
         if(gcur.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY && firstDayInt == Calendar.SUNDAY)
             week_id--;
