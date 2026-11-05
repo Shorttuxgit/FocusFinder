@@ -548,9 +548,9 @@ abstract class gesture_swipe : View.OnTouchListener
             return result;
         }
 
-        override fun onDown(e: MotionEvent): Boolean {
+        override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
             onClick(e);
-            return true;
+            return super.onSingleTapConfirmed(e)
         }
     }
     abstract fun onSwipeLeft();

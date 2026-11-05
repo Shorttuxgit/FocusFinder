@@ -100,6 +100,7 @@
                     android:layout_gravity="center"
                     android:layout_weight="0.01"
                     android:text="Reset data"
+                    android:textColor="@color/separator"
                     android:textSize="18dp" />
             </LinearLayout>
 
