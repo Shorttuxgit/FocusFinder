@@ -19,11 +19,10 @@ class TimetableWidget:
         
         # Load user configuration settings
         config = load_config()
-        self.sett_enabled = config.get("sett_enabled", False)
-        self.friends_system_enabled = config.get("friends_system", False)
+        self.sett_enabled = config.get("sett_enabled", True)
+        self.friends_system_enabled = config.get("friends_system", True)
         self.time_format = config.get("time_format", False)
         self.update_time_format_variables()
-
         # Determine greeting based on current time of day
         current_Date = datetime.now()
         current_time = current_Date.strftime("%p")

@@ -7,7 +7,11 @@ BASE_URL = "https://focus.barton.ac.uk"
 SESSION_FILE = "session.json"
 CACHE_FILE = "timetable_cache.json"
 FRIENDS_FILE = "friends_cache.json"
-CONFIG_FILE = "config.json"
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+CONFIG_FILE = PROJECT_ROOT / "config.json"
 ICON_FILE = "icon.ico" if CURRENT_OS == "Windows" else "icon.png"
 
 # Define user interface color palette constants
