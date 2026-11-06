@@ -1847,7 +1847,7 @@ class focus_main : AppCompatActivity() {
                 var sbeg = sdfm.format(gc.time);
 
                 gc.set(Calendar.DAY_OF_WEEK, Calendar.SUNDAY);
-                gc.add(Calendar.WEEK_OF_YEAR, 1);
+                //gc.add(Calendar.WEEK_OF_YEAR, 1);
                 var send = sdfm.format(gc.time);
 
                 url = URL("https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&hourly=weather_code,apparent_temperature,precipitation,is_day,visibility&current=is_day,apparent_temperature&timezone=auto&timeformat=unixtime&start_date=${sbeg}&end_date=${send}");
