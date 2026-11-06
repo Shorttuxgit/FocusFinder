@@ -19,7 +19,8 @@ It supports
 * Fetching this weeks timetable data
 * Sharing your timetable to your friends
 * Telling you whether you share any free periods with your friends
-* Telling you the weather
+* Telling you the weather through a dedicated forecast tab
+* Has a settings menu for enabling/disabling specific features and reseting data
 
 It is written in Kotlin.
 

@@ -191,7 +191,7 @@
                     android:layout_height="match_parent"
                     android:layout_weight="0.5"
                     android:orientation="vertical"
-                    android:paddingLeft="20dp">
+                    android:paddingLeft="0dp">
 
                     <TextView
                         android:id="@+id/v1time"
@@ -200,6 +200,7 @@
                         android:layout_marginTop="10dp"
                         android:layout_weight="1"
                         android:fontFamily="sans-serif"
+                        android:paddingLeft="20dp"
                         android:text="View1"
                         android:textSize="24dp" />
 
@@ -209,6 +210,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
                         android:layout_weight="1"
+                        android:paddingLeft="20dp"
                         android:text="View1"
                         android:textSize="18dp" />
 
@@ -218,10 +220,17 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
                         android:layout_weight="1"
+                        android:paddingLeft="20dp"
                         android:text="View1"
                         android:textSize="16dp" />
 
                 </LinearLayout>
+
+                <View
+                    android:id="@+id/view25"
+                    android:layout_width="1dp"
+                    android:layout_height="match_parent"
+                    android:background="@color/separator" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -270,7 +279,7 @@
                     android:layout_height="match_parent"
                     android:layout_weight="0.5"
                     android:orientation="vertical"
-                    android:paddingLeft="20dp">
+                    android:paddingLeft="0dp">
 
                     <TextView
                         android:id="@+id/v2time"
@@ -278,6 +287,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
                         android:layout_weight="0.5"
+                        android:paddingLeft="20dp"
                         android:text="View1"
                         android:textSize="24dp" />
 
@@ -287,6 +297,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
                         android:layout_weight="0.5"
+                        android:paddingLeft="20dp"
                         android:text="View1"
                         android:textSize="18dp" />
 
@@ -296,10 +307,17 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
                         android:layout_weight="0.5"
+                        android:paddingLeft="20dp"
                         android:text="View1"
                         android:textSize="16dp" />
 
                 </LinearLayout>
+
+                <View
+                    android:id="@+id/view26"
+                    android:layout_width="1dp"
+                    android:layout_height="match_parent"
+                    android:background="@color/separator" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -347,7 +365,7 @@
                     android:layout_height="match_parent"
                     android:layout_weight="0.5"
                     android:orientation="vertical"
-                    android:paddingLeft="20dp">
+                    android:paddingLeft="0dp">
 
                     <TextView
                         android:id="@+id/v3time"
@@ -355,6 +373,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
                         android:layout_weight="0.5"
+                        android:paddingLeft="20dp"
                         android:text="View1"
                         android:textSize="24dp" />
 
@@ -364,6 +383,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
                         android:layout_weight="0.5"
+                        android:paddingLeft="20dp"
                         android:text="View1"
                         android:textSize="18dp" />
 
@@ -373,9 +393,16 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
                         android:layout_weight="0.5"
+                        android:paddingLeft="20dp"
                         android:text="View1"
                         android:textSize="16dp" />
                 </LinearLayout>
+
+                <View
+                    android:id="@+id/view27"
+                    android:layout_width="1dp"
+                    android:layout_height="match_parent"
+                    android:background="@color/separator" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -423,7 +450,7 @@
                     android:layout_height="match_parent"
                     android:layout_weight="0.5"
                     android:orientation="vertical"
-                    android:paddingLeft="20dp">
+                    android:paddingLeft="0dp">
 
                     <TextView
                         android:id="@+id/v4time"
@@ -431,6 +458,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
                         android:layout_weight="0.5"
+                        android:paddingLeft="20dp"
                         android:text="View1"
                         android:textSize="24dp" />
 
@@ -440,6 +468,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
                         android:layout_weight="0.5"
+                        android:paddingLeft="20dp"
                         android:text="View1"
                         android:textSize="18dp" />
 
@@ -449,9 +478,16 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
                         android:layout_weight="0.5"
+                        android:paddingLeft="20dp"
                         android:text="View1"
                         android:textSize="16dp" />
                 </LinearLayout>
+
+                <View
+                    android:id="@+id/view28"
+                    android:layout_width="1dp"
+                    android:layout_height="match_parent"
+                    android:background="@color/separator" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -489,6 +525,50 @@
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
                 android:background="@color/separator" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/share5"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="5dp"
+                    android:layout_weight="0.5"
+                    android:backgroundTint="@color/material_dynamic_neutral60"
+                    android:capitalize="none"
+                    android:paddingLeft="6dp"
+                    android:paddingRight="6dp"
+                    android:text="Timetable"
+                    android:textAllCaps="false"
+                    android:textColor="@color/white"
+                    android:textSize="20dp"
+                    android:visibility="visible"
+                    app:iconPadding="0dp"
+                    app:iconTint="@color/ic_launcher_background"
+                    app:iconTintMode="multiply" />
+
+                <Button
+                    android:id="@+id/share6"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="5dp"
+                    android:layout_weight="0.5"
+                    android:backgroundTint="@color/material_dynamic_neutral60"
+                    android:capitalize="none"
+                    android:paddingLeft="6dp"
+                    android:paddingRight="6dp"
+                    android:text="Forecast"
+                    android:textAllCaps="false"
+                    android:textColor="@color/white"
+                    android:textSize="20dp"
+                    app:iconPadding="0dp"
+                    app:iconTint="@color/ic_launcher_background"
+                    app:iconTintMode="multiply" />
+
+            </LinearLayout>
 
         </LinearLayout>
     </ScrollView>
