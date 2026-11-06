@@ -653,10 +653,12 @@ def finish_installation(install_dir):
     save_installed_version(install_dir)
 
 
-def install_application(install_dir, reinstall=False):
-    """Perform a fresh installation, optionally removing the previous one."""
+
+def install_application(install_dir):
+    """Perform a completely fresh installation."""
 
     validate_source()
+
     install_package = install_dir / PACKAGE_NAME
 
     if SOURCE_DIR.resolve() == install_package.resolve():
@@ -665,12 +667,15 @@ def install_application(install_dir, reinstall=False):
             "not from the installed application."
         )
 
-    if reinstall:
+    # Always remove an existing installation before copying.
+    if install_dir.exists():
         print("[*] Removing existing installation...")
         remove_shortcuts()
         remove_installation(install_dir)
 
+    # Create a completely fresh installation directory.
     install_dir.mkdir(parents=True, exist_ok=True)
+
     copy_application(install_dir)
     finish_installation(install_dir)
 
@@ -815,16 +820,19 @@ def main():
 
         if choice == "1":
             if installed:
-                if not confirm_action(
-                    "This will completely remove the existing installation, "
-                    "including saved data inside its installation folder, "
-                    "before reinstalling.\n"
-                    "Type YES only if you are happy to proceed."
-                ):
-                    print("\n[*] Reinstallation cancelled.")
-                    return 0
+                if choice == "1":
+                    if install_dir.exists():
+                        if not confirm_action(
+                            "This will completely remove the existing installation, "
+                            "including saved data inside its installation folder, "
+                            "before installing a fresh copy.\n"
+                            "Type YES only if you are happy to proceed."
+                        ):
+                            print("\n[*] Installation cancelled.")
+                            return 0
 
-                install_application(install_dir, reinstall=True)
+                    install_application(install_dir)
+
             else:
                 install_application(get_install_dir())
 
