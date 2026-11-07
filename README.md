@@ -21,7 +21,7 @@ It supports
 * Telling you whether you share any free periods with your friends
 * Telling you the weather through a dedicated forecast tab
 * Has a settings menu for enabling/disabling specific features and resetting data
-* Busses serviced by your bus stops, and departure times of busses. 
+* Showing which Busses are serviced by your bus stops, and departure times of any busses. 
 
 It is written in Kotlin.
 
