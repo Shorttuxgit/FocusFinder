@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".transit_loader">
+
+    <LinearLayout
+        android:layout_width="409dp"
+        android:layout_height="729dp"
+        android:orientation="vertical"
+        android:layout_marginStart="1dp"
+        android:layout_marginEnd="1dp"
+        android:layout_marginBottom="1dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <WebView
+            android:id="@+id/wviewt"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+        </WebView>
+
+        <View
+            android:id="@+id/view18"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/separator" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/share14"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginRight="2.5dp"
+                android:layout_weight="1"
+                android:backgroundTint="@color/material_dynamic_neutral_variant40"
+                android:paddingLeft="0dp"
+                android:paddingRight="0dp"
+                android:textColor="@color/white"
+                android:textSize="20dp"
+                android:visibility="visible"
+                app:icon="@android:drawable/ic_media_rew"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp"
+                app:iconTint="@color/ic_launcher_background"
+                app:iconTintMode="multiply" />
+
+            <Button
+                android:id="@+id/share15"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginLeft="2.5dp"
+                android:layout_marginRight="2.5dp"
+                android:layout_weight="1.1"
+                android:backgroundTint="@color/material_dynamic_neutral60"
+                android:paddingLeft="6dp"
+                android:paddingRight="6dp"
+                android:textColor="@color/white"
+                android:textSize="20dp"
+                android:visibility="visible"
+                app:icon="@android:drawable/ic_dialog_info"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp"
+                app:iconTint="@color/ic_launcher_background"
+                app:iconTintMode="multiply" />
+
+            <Button
+                android:id="@+id/share17"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginLeft="2.5dp"
+                android:layout_marginRight="2.5dp"
+                android:layout_weight="0.8"
+                android:backgroundTint="@color/material_dynamic_neutral60"
+                android:paddingLeft="6dp"
+                android:paddingRight="6dp"
+                android:text="selected"
+                android:textColor="@color/white"
+                android:textSize="20dp"
+                android:visibility="visible"
+                app:iconPadding="0dp"
+                app:iconTint="@color/ic_launcher_background"
+                app:iconTintMode="multiply" />
+
+            <Button
+                android:id="@+id/share16"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginLeft="2.5dp"
+                android:layout_weight="1"
+                android:backgroundTint="@color/material_dynamic_neutral_variant40"
+                android:paddingLeft="6dp"
+                android:paddingRight="6dp"
+                android:textColor="@color/white"
+                android:textSize="20dp"
+                android:visibility="visible"
+                app:icon="@android:drawable/ic_media_ff"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp"
+                app:iconTint="@color/ic_launcher_background"
+                app:iconTintMode="multiply" />
+
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/separator" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/share11"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="0.5"
+                android:backgroundTint="@color/material_dynamic_neutral60"
+                android:capitalize="none"
+                android:paddingLeft="6dp"
+                android:paddingRight="6dp"
+                android:text="Timetable"
+                android:textAllCaps="false"
+                android:textColor="@color/white"
+                android:textSize="20dp"
+                android:visibility="visible"
+                app:iconPadding="0dp"
+                app:iconTint="@color/ic_launcher_background"
+                app:iconTintMode="multiply" />
+
+            <Button
+                android:id="@+id/share12"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="5dp"
+                android:layout_weight="0.5"
+                android:backgroundTint="@color/material_dynamic_neutral60"
+                android:capitalize="none"
+                android:paddingLeft="6dp"
+                android:paddingRight="6dp"
+                android:text="Forecast"
+                android:textAllCaps="false"
+                android:textColor="@color/white"
+                android:textSize="20dp"
+                app:iconPadding="0dp"
+                app:iconTint="@color/ic_launcher_background"
+                app:iconTintMode="multiply" />
+
+            <Button
+                android:id="@+id/share13"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="5dp"
+                android:layout_weight="0.5"
+                android:backgroundTint="@color/material_dynamic_neutral60"
+                android:capitalize="none"
+                android:paddingLeft="6dp"
+                android:paddingRight="6dp"
+                android:text="Transit"
+                android:textAllCaps="false"
+                android:textColor="@color/white"
+                android:textSize="20dp"
+                app:iconPadding="0dp"
+                app:iconTint="@color/ic_launcher_background"
+                app:iconTintMode="multiply" />
+
+        </LinearLayout>
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -21,7 +21,11 @@ import android.graphics.drawable.PictureDrawable
 import android.location.Location
 import android.location.LocationManager
 import android.media.MediaMetadata
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.NetworkInfo
 import android.net.Uri
+import android.net.http.NetworkException
 import android.os.Bundle
 import android.os.Looper
 import android.os.ParcelFileDescriptor
@@ -35,6 +39,7 @@ import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.AdapterView
@@ -47,7 +52,9 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.graphics.drawable.toBitmap
@@ -68,6 +75,7 @@ import androidx.room.Database
 import androidx.room.Delete
 import androidx.room.Entity
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
@@ -75,6 +83,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import androidx.room.concurrent.AtomicBoolean
+import androidx.room.concurrent.AtomicInt
 import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat
 import com.caverock.androidsvg.SVG
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -83,6 +92,7 @@ import com.google.gson.Gson
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import org.json.JSONTokener
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.lang.Integer.min
@@ -104,6 +114,13 @@ import javax.net.ssl.HttpsURLConnection
 import kotlin.concurrent.thread
 import kotlin.math.abs
 
+var visibile_busses = true;
+val special_busses = arrayOf(
+    "424", "24", "425", "601", "602", "603", "604", "605", "609",
+    "606", "607", "608", "618", "610", "611", "612", "613", "622",
+    "614", "615", "616", "617", "619", "620", "621", "623", "624",
+    "625", "626", "627", "628", "630", "631", "632",
+);
 fun create_gregorian() : GregorianCalendar
 {
     val gc = GregorianCalendar(Locale("en", "GB"));
@@ -288,6 +305,13 @@ data class week_cached
     @PrimaryKey(autoGenerate = true) var cache_id : Int = 0;
 }
 
+@Entity
+data class bus_stop_ids
+(
+    @PrimaryKey val stop_id : String,
+    @ColumnInfo val readable_name : String,
+)
+
 class week_list_converter
 {
     @TypeConverter
@@ -301,21 +325,29 @@ interface week_dao
 {
     @Query("SELECT * FROM week_cached")
     fun get_all() : LiveData<List<week_cached>>;
+    @Query("SELECT * FROM bus_stop_ids")
+    fun get_all_stops() : LiveData<List<bus_stop_ids>>;
     @Query("SELECT * FROM week_cached WHERE week_id IN (:week_ids)")
     fun get_by_week(week_ids : IntArray) : List<week_cached>;
 
     @Insert
     suspend fun insert_week(vararg week_days : week_cached);
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert_stop(vararg stops: bus_stop_ids);
 
     @Delete
     suspend fun delete_week(week_day : week_cached);
     @Query("DELETE FROM week_cached")
     suspend fun delete_all();
+    @Query("DELETE FROM bus_stop_ids")
+    suspend fun delete_all_stops();
     @Query("DELETE FROM week_cached WHERE name = :name AND is_main = 0")
     suspend fun delete_of(name : String);
+    @Query("DELETE FROM bus_stop_ids WHERE stop_id = :id")
+    suspend fun delete_stop(id : String);
 }
 @TypeConverters(value = [week_list_converter::class])
-@Database(entities = [week_cached::class], version = 6, exportSchema = false)
+@Database(entities = [week_cached::class, bus_stop_ids::class], version = 8, exportSchema = false)
 abstract class week_database : RoomDatabase()
 {
     abstract fun get_week_dao() : week_dao;
@@ -338,29 +370,41 @@ abstract class week_database : RoomDatabase()
 class week_repo(private val dao : week_dao)
 {
     val weeks = dao.get_all();
+    val stops = dao.get_all_stops();
     suspend fun insert(todo: week_cached) = dao.insert_week(todo);
+    suspend fun insert_stop(id : bus_stop_ids) = dao.insert_stop(id);
     suspend fun delete_all() = dao.delete_all();
+    suspend fun delete_all_stops() = dao.delete_all_stops();
     suspend fun delete_week(week : week_cached) = dao.delete_week(week);
     suspend fun delete_of(name : String) = dao.delete_of(name);
+    suspend fun delete_stop(id : String) = dao.delete_stop(id);
 }
 
 class week_view(application: Application) : AndroidViewModel(application)
 {
     private val caches : week_repo;
     val all_weeks : LiveData<List<week_cached>>
+    val all_stops : LiveData<List<bus_stop_ids>>;
 
     init
     {
         val dao = week_database.get_database(application).get_week_dao();
         caches = week_repo(dao);
         all_weeks = caches.weeks;
+        all_stops = caches.stops;
     }
 
     fun insert(week : week_cached) = viewModelScope.launch {
         caches.insert(week);
     }
+    fun insert_stop(stop : bus_stop_ids) = viewModelScope.launch {
+        caches.insert_stop(stop);
+    }
     fun clear_all() = viewModelScope.launch {
         caches.delete_all()
+    }
+    fun clear_all_stops() = viewModelScope.launch {
+        caches.delete_all_stops();
     }
     fun delete(week : week_cached) = viewModelScope.launch {
         caches.delete_week(week);
@@ -368,17 +412,191 @@ class week_view(application: Application) : AndroidViewModel(application)
     fun delete_of(name : String) = viewModelScope.launch {
         caches.delete_of(name);
     }
+    fun delete_stop(stop : String) = viewModelScope.launch {
+        caches.delete_stop(stop);
+    }
 }
-class timetable_adapter : RecyclerView.Adapter<timetable_adapter.ViewHolder>
+fun init_timerecycler(adapt : RecyclerView.Adapter<timetable_adapter.ViewHolder>, rec : RecyclerView)
+{
+    var ly : LinearLayoutManager = LinearLayoutManager(rec.context);
+    rec.layoutManager = ly;
+    val did = DividerItemDecoration(rec.context, ly.getOrientation());
+    rec.addItemDecoration(did);
+    rec.adapter = adapt;
+}
+class transit_dep_adapter : RecyclerView.Adapter<transit_dep_adapter.ViewHolder>
 {
     var infl : LayoutInflater;
     var ctx : Context;
-    var list : ArrayList<String> = ArrayList<String>();
+    var stop : focus_main.bus_stop = focus_main.bus_stop("", emptyList(), emptyList(), emptyList());
+    var flist = emptyList<focus_main.bus_stop_departure>();
     constructor(c : Context)
     {
         ctx = c;
         infl = LayoutInflater.from(ctx);
     }
+
+    fun set_stop(b : focus_main.bus_stop)
+    {
+        stop = b;
+        flist = stop.stop_deps.filter {
+            it.name in special_busses
+        };
+        if(stop.stop_deps.size > 0)
+            super.notifyItemRangeInserted(0, stop.stop_deps.size);
+    }
+
+    override fun onCreateViewHolder(
+        parent: ViewGroup,
+        viewType: Int
+    ): ViewHolder {
+        val vw = infl.inflate(R.layout.transit_dep_data, parent, false);
+        return ViewHolder(vw);
+    }
+
+    override fun onBindViewHolder(
+        holder: ViewHolder,
+        position: Int
+    ) {
+        val list = if(visibile_busses) stop.stop_deps else flist;
+        val item: focus_main.bus_stop_departure = list[position];
+        if(item.name in special_busses)
+            holder.hold.setBackgroundColor(ctx.resources.getColor(com.google.android.material.R.color.material_dynamic_primary10));
+        else
+            holder.hold.setBackgroundColor(Color.TRANSPARENT);
+        holder.bus.text = item.name;
+        holder.desc.text = item.desc;
+        val t = if(item.arrival == "Due") "Now" else item.arrival;
+        holder.due.text = item.arrival;
+    }
+
+    override fun getItemCount(): Int {
+        if(visibile_busses)
+            return stop.stop_deps.size;
+        else
+            return flist.size;
+    }
+    inner class ViewHolder : RecyclerView.ViewHolder {
+        val bus : TextView;
+        val desc : TextView;
+        val due : TextView;
+        val hold : LinearLayout;
+        //val bs_d_adapt : timetable_adapter;
+
+        constructor(iv : View) : super(iv) {
+            bus = iv.findViewById<TextView>(R.id.bd_bus);
+            desc = iv.findViewById<TextView>(R.id.bd_desc);
+            due = iv.findViewById<TextView>(R.id.bd_due);
+            hold = iv.findViewById<LinearLayout>(R.id.bd_view);
+        }
+    }
+
+}
+class transit_adapter : RecyclerView.Adapter<transit_adapter.ViewHolder>
+{
+    var infl : LayoutInflater;
+    var ctx : Context;
+    var list : ArrayList<focus_main.bus_stop> = ArrayList<focus_main.bus_stop>();
+    var flist = ArrayList<focus_main.bus_stop>();
+    constructor(c : Context)
+    {
+        ctx = c;
+        infl = LayoutInflater.from(ctx);
+    }
+
+    fun add_stop(stop : focus_main.bus_stop)
+    {
+        list.add(stop);
+        if(stop.stopf_busses.size > 0)
+        {
+            flist.add(stop);
+            super.notifyItemInserted(list.size-1);
+        }
+        else if(visibile_busses)
+            super.notifyItemInserted(list.size-1);
+    }
+
+    override fun onCreateViewHolder(
+        parent: ViewGroup,
+        viewType: Int
+    ): ViewHolder {
+        val vw = infl.inflate(R.layout.transit_data, parent, false);
+        return ViewHolder(vw);
+    }
+
+    override fun onBindViewHolder(
+        holder: ViewHolder,
+        position: Int
+    ) {
+        val _list = if(visibile_busses) list else flist;
+        val item: focus_main.bus_stop = _list[position];
+        holder.tv.text = item.stop_name;
+        holder.bs_b_adapt.list.clear();
+        val __list = if(visibile_busses) item.stop_busses else item.stopf_busses;
+        holder.bs_b_adapt.list.addAll(__list);
+        holder.bs_b_adapt.notifyDataSetChanged();
+
+        holder.bs_d_adapt.set_stop(item);
+    }
+
+    override fun getItemCount(): Int {
+        return if(visibile_busses) list.size else flist.size;
+    }
+    class transit_ontouch : RecyclerView.OnItemTouchListener
+    {
+        override fun onInterceptTouchEvent(
+            rv: RecyclerView,
+            e: MotionEvent
+        ): Boolean {
+            val action = e.action;
+            when (action) {
+                MotionEvent.ACTION_MOVE -> rv.parent.requestDisallowInterceptTouchEvent(true);
+            }
+            return false;
+        }
+
+        override fun onTouchEvent(
+            rv: RecyclerView,
+            e: MotionEvent
+        ) {
+        }
+
+        override fun onRequestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {
+        }
+    }
+    inner class ViewHolder : RecyclerView.ViewHolder {
+        val tv : TextView;
+        val bs_b : RecyclerView;
+        val bs_b_adapt : timetable_adapter;
+
+        val bs_d : RecyclerView;
+        val bs_d_adapt : transit_dep_adapter;
+
+        constructor(iv : View) : super(iv) {
+            tv = iv.findViewById<TextView>(R.id.bs_name);
+            bs_b = iv.findViewById<RecyclerView>(R.id.bs_busses);
+            bs_b.addOnItemTouchListener(transit_ontouch())
+
+            bs_b_adapt = timetable_adapter(false, ctx);
+            init_timerecycler(bs_b_adapt, bs_b);
+
+            bs_d = iv.findViewById<RecyclerView>(R.id.bs_deps);
+            bs_d.addOnItemTouchListener(transit_ontouch())
+
+            bs_d_adapt = transit_dep_adapter(ctx);
+
+            var ly : LinearLayoutManager = LinearLayoutManager(ctx);
+            bs_d.layoutManager = ly;
+            val did = DividerItemDecoration(ctx, ly.getOrientation());
+            bs_d.addItemDecoration(did);
+            bs_d.adapter = bs_d_adapt;
+        }
+    }
+}
+class timetable_adapter(val hf : Boolean, val ctx : Context, val infl : LayoutInflater = LayoutInflater.from(ctx)) :
+    RecyclerView.Adapter<timetable_adapter.ViewHolder>()
+{
+    var list : ArrayList<String> = ArrayList<String>();
 
     override fun onCreateViewHolder(
         parent: ViewGroup,
@@ -392,15 +610,19 @@ class timetable_adapter : RecyclerView.Adapter<timetable_adapter.ViewHolder>
         holder: ViewHolder,
         position: Int
     ) {
-        val animal: String = list[position] + " has Free";
+        val animal: String = list[position] + if (hf) " has Free" else "";
         holder.tv.text = animal;
+        if(!hf)
+        {
+            if(animal in special_busses)
+                holder.tv.setBackgroundColor(ctx.resources.getColor(com.google.android.material.R.color.material_dynamic_primary10));
+            else
+                holder.tv.setBackgroundColor(Color.TRANSPARENT);
+        }
     }
 
     override fun getItemCount(): Int {
         return list.size;
-    }
-    fun getItem(id: Int): String {
-        return list[id] + " has Free";
     }
 
     inner class ViewHolder : RecyclerView.ViewHolder {
@@ -430,7 +652,7 @@ class timetable_view
         vtime = vt;
         layout = l;
         rec = r;
-        adapt = timetable_adapter(rec.context);
+        adapt = timetable_adapter(true, rec.context);
         var ly : LinearLayoutManager = LinearLayoutManager(rec.context);
         rec.layoutManager = ly;
         val did = DividerItemDecoration(rec.context, ly.getOrientation());
@@ -516,7 +738,7 @@ abstract class gesture_swipe : View.OnTouchListener
     inner class GestureListener : GestureDetector.SimpleOnGestureListener()
     {
         override fun onDoubleTap(e: MotionEvent): Boolean {
-            onDoubleClick();
+            onDoubleClick(e);
             return true;
         }
         override fun onFling(
@@ -555,7 +777,7 @@ abstract class gesture_swipe : View.OnTouchListener
     }
     abstract fun onSwipeLeft();
     abstract fun onSwipeRight();
-    abstract fun onDoubleClick();
+    abstract fun onDoubleClick(e : MotionEvent);
     abstract fun onClick(e : MotionEvent);
 }
 class weather_view(var visibility : TextView, var precipitation : TextView, var time : TextView, var icon : ImageView, var temp : TextView)
@@ -805,6 +1027,25 @@ class timetable_friend
         day_time = dt;
     }
 }
+class transit_array_adapter(val ctx: Context, val layout: Int, val items : ArrayList<bus_stop_ids>, val items_string : ArrayList<String> =
+    ArrayList<String>(items.map {
+        bus -> bus.readable_name;
+    }.toList())
+) : ArrayAdapter<String>(ctx, layout, items_string) {
+
+    fun update_items(new_items : ArrayList<bus_stop_ids>)
+    {
+        items.clear();
+        items.addAll(new_items);
+
+        items_string.clear();
+        items_string.addAll(new_items.map {
+            bus -> bus.readable_name
+        });
+
+        super.notifyDataSetChanged();
+    }
+}
 class focus_main : AppCompatActivity() {
     var date : GregorianCalendar = create_gregorian();
     var cookies : String? = null;
@@ -829,12 +1070,35 @@ class focus_main : AppCompatActivity() {
     var friends = ArrayList<timetable_friend>();
     var cur_selced = -1;
     var unloaded : AtomicBoolean = AtomicBoolean(true);
+    var bus_stopped = Semaphore(-1);
+    var bus_data = Semaphore(-1);
+    // bus_stopped : AtomicBoolean = AtomicBoolean(false);
     var shared_prefs : SharedPreferences? = null;
     var weather : Boolean = true;
     var hide_friends : Boolean = false;
     var weather_locale = false;
     var dweather_hash = Hashtable<Int, Drawable>();
     var current_temp : Double = 0.0;
+    var mod_count : AtomicInt = AtomicInt(0);
+    val stop_observer : Observer<List<bus_stop_ids>> = Observer { cur_view ->
+        val stop_ac = acquire_stop();
+        if(stop_ac == 0)
+            return@Observer
+        if(stop_ac == 1)
+        {
+            if(mod_count.getAndUpdate {
+                        i -> if (i > 0) i-1 else i;
+                } > 0)
+                bus_data.release();
+            else
+                transit_do_thread(cur_view);
+        }
+        else if(stop_ac == 2) {
+            runOnUiThread {
+                transit_update_list(cur_view);
+            }
+        }
+    }
     val cache_observer : Observer<List<week_cached>> = Observer<List<week_cached>> { week_caches ->
 
         if(unloaded.getAndSet(false)) {
@@ -890,6 +1154,16 @@ class focus_main : AppCompatActivity() {
                 load_weather(::continue_cache);
             }
         }
+    }
+    fun acquire_stop() : Int
+    {
+        if(!bus_stopped.tryAcquire())
+        {
+            if(!bus_data.tryAcquire())
+                return 0;
+            return 1;
+        }
+        return 2;
     }
     fun update_texts()
     {
@@ -1089,6 +1363,343 @@ class focus_main : AppCompatActivity() {
             sdfmt = sdfmt4;
         return sdfmt;
     }
+    fun wview_clear(wview : WebView)
+    {
+        wview.clearHistory();
+        wview.clearCache(true);
+        wview.loadUrl("about:blank");
+        wview.onPause();
+        wview.pauseTimers();
+    }
+    fun transit_update_list(cur_view : List<bus_stop_ids>)
+    {
+        val spnr = findViewById<Spinner>(R.id.spinner3);
+        if(spnr.adapter != null)
+        {
+            val aa = spnr.adapter as transit_array_adapter;
+            val items: ArrayList<bus_stop_ids> = ArrayList<bus_stop_ids>(cur_view.size + 1);
+            for (i in 0 until cur_view.size + 1) {
+                if (i == cur_view.size)
+                    items.add(bus_stop_ids("", "Delete a bus stop"));
+                else
+                    items.add(bus_stop_ids(cur_view[i].stop_id, cur_view[i].readable_name));
+            }
+            aa.update_items(items);
+            spnr.setSelection(cur_view.size);
+        }
+        else {
+            val items: ArrayList<bus_stop_ids> = ArrayList<bus_stop_ids>(cur_view.size + 1);
+            for (i in 0 until cur_view.size + 1) {
+                if (i == cur_view.size)
+                    items.add(bus_stop_ids("", "Delete a bus stop"));
+                else
+                    items.add(bus_stop_ids(cur_view[i].stop_id, cur_view[i].readable_name));
+            }
+            var aa = transit_array_adapter(this, R.layout.spinner_layout, items);
+            aa.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+            spnr.adapter = aa;
+            spnr.setSelection(cur_view.size);
+
+            spnr.post {
+                spnr.onItemSelectedListener = object : OnItemSelectedListener {
+                    override fun onItemSelected(
+                        p0: AdapterView<*>?,
+                        p1: View?,
+                        p2: Int,
+                        p3: Long
+                    ) {
+                        if (p2 == aa.items.size - 1)
+                            return;
+
+                        spnr.setSelection(aa.items.size - 1);
+
+                        val stop_id = aa.items[p2].stop_id;
+
+                        aa.items.removeAt(p2);
+                        aa.items_string.removeAt(p2);
+
+                        aa.notifyDataSetChanged();
+
+                        spnr.setSelection(aa.items.size - 1);
+
+                        val len = aa.items.size - 1;
+                        cache_view?.delete_stop(stop_id);
+                        Log.println(Log.DEBUG, "len: $len", "data");
+                        if (len == 0) {
+                            bus_stopped.acquire();
+                            setContentView(R.layout.activity_transit_loader);
+                            transit_loader_update();
+                        }
+                    }
+
+                    override fun onNothingSelected(p0: AdapterView<*>?) {
+
+                    }
+                }
+            }
+        }
+        bus_stopped.release();
+    }
+    fun transit_update_post()
+    {
+        val exb = findViewById<Button>(R.id.share18);
+        exb.setOnClickListener {
+            bus_stopped.acquire();
+            init_login_nt();
+            ui_timetable();
+        }
+
+        var fcst = findViewById<Button>(R.id.share19);
+        fcst.setOnClickListener {
+            bus_stopped.acquire();
+            setContentView(R.layout.activity_weather);
+            forecast_update();
+        }
+
+        val addn = findViewById<Button>(R.id.share21);
+        addn.setOnClickListener {
+            bus_stopped.acquire();
+            setContentView(R.layout.activity_transit_loader);
+            transit_loader_update();
+        }
+
+        var set = findViewById<Button>(R.id.share22);
+        set.setOnClickListener {
+            setContentView(R.layout.activity_settings);
+            settings_update();
+        }
+
+        cache_view?.all_stops?.hasActiveObservers()
+        try {
+            cache_view?.all_stops?.removeObserver(stop_observer);
+        }catch(e : Exception) {}
+        bus_stopped.release();
+        cache_view?.all_stops?.observe(this, stop_observer);
+    }
+    fun fetch_bus_stop(stop_id : String) : String? {
+        val stop_url : String = "https://www.bluestarbus.co.uk/stops/$stop_id";
+        val url = URL(stop_url);
+        Log.println(Log.DEBUG, "tg", "url: ${url.toURI()}");
+        var url_res : String? = null;
+        with(url.openConnection() as HttpsURLConnection)
+        {
+            setRequestProperty("User-Agent", "curl/7.81.0");
+            val _t = responseCode;
+            Log.println(Log.DEBUG, "lg", "code $_t for bus stop");
+            val reader = getInputStream().bufferedReader();
+            var line: String = reader.readText();
+            url_res = line;
+        }
+        return url_res;
+    }
+    fun transit_item_body(s_i : String, s : String, c : String) : String
+    {
+        val name = s.substring(s.indexOf("<$s_i class=\"$c\"") + 10 + s_i.length + c.length);
+        val name_end = name.substring(name.indexOf(">") + 1);
+        val name_data = name_end.substring(0, name_end.indexOf("</$s_i>"));
+        return name_data;
+    }
+    fun transit_h1_body(s : String, c : String) : String
+    {
+        return transit_vs(transit_item_body("h1", s, c));
+    }
+    fun transit_ol_body(s : String, c : String) : String
+    {
+        return transit_item_body("ol", s, c);
+    }
+    fun transit_vs(s : String) : String
+    {
+        return s.replace("\\s+".toRegex(), " ").lines().joinToString("").trim();
+    }
+    data class bus_stop_departure(val name : String, val desc : String, val arrival : String);
+    data class bus_stop(val stop_name : String, val stop_busses : List<String>, val stopf_busses : List<String>, val stop_deps : List<bus_stop_departure>);
+    fun transit_do_thread(data_live : List<bus_stop_ids>)
+    {
+        val datac = data_live.toList();
+        thread(isDaemon = true) {
+            Log.println(Log.DEBUG, "len", "l ${datac.size}");
+
+            runOnUiThread {
+                val adapt = transit_adapter(this);
+                val ta = findViewById<RecyclerView>(R.id.rec_transit);
+                var ly : LinearLayoutManager = LinearLayoutManager(ta.context);
+                ta.layoutManager = ly;
+                val did = DividerItemDecoration(ta.context, ly.getOrientation());
+                ta.addItemDecoration(did);
+                ta.adapter = adapt;
+            }
+
+            val stops : ArrayList<bus_stop> = ArrayList<bus_stop>();
+            for(i in 0 until datac.size)
+            {
+                //Log.println(Log.DEBUG, "fetch", "data i $i");
+                try {
+                    val deps : ArrayList<bus_stop_departure> = ArrayList<bus_stop_departure>();
+                    val busses : ArrayList<String> = ArrayList<String>();
+                    val fbusses = ArrayList<String>();
+                    val data = fetch_bus_stop(datac[i].stop_id)!!;
+                    val name_data = transit_h1_body(data, "place-info-banner__name");
+
+                    Log.println(Log.DEBUG, "name", "stop name : $name_data");
+
+                    val pstops_list = data.substring(data.indexOf("place-info-banner__block-list"));
+                    val astops_list = pstops_list.substring(pstops_list.indexOf(">")+1);
+
+                    val stops_list = astops_list.split("<div class=\"line-block__contents\">");
+                    Log.println(Log.DEBUG, "stops_list cnt : ", "${stops_list.size}");
+                    for(s in stops_list.stream().skip(1))
+                    {
+                        val stop_data = s.substring(0, s.indexOf("</div>")).replace("\n", " ").trim();
+                        Log.println(Log.DEBUG, "stop has", "stop $stop_data");
+                        busses.add(stop_data);
+                        if(stop_data in special_busses)
+                            fbusses.add(stop_data);
+                    }
+
+                    if(data.indexOf("There are no departures available for this stop at the moment.") < 0)
+                    {
+                        val depb = transit_ol_body(data, "departure-board");
+                        val depb_list = depb.split("departure-board__item");
+
+                        for(s in depb_list.stream().skip(1))
+                        {
+                            val entry = s.substring(s.indexOf(">")+1);
+
+                            val name = transit_item_body("div", entry, "single-visit__name");
+                            val desc = transit_item_body("div", entry, "single-visit__description");
+                            val arriv_body = transit_item_body("div", entry, "single-visit__arrival-time");
+
+                            var arriv = arriv_body.substring(arriv_body.indexOf("<div class=\"single-visit__arrival-time__cell\">")+46);
+
+                            var cancelled = false;
+                            try {
+                                val cicon = transit_item_body("div", entry, "single-visit__icon");
+                                cancelled = cicon.contains("Cancelled");
+                            }catch(e: Exception){}
+
+                            if(cancelled) arriv = "Cancelled";
+                            deps.add(bus_stop_departure(name, desc, arriv));
+                            Log.println(Log.DEBUG, "data", "bus $name desc $desc arrival time $arriv")
+                        }
+                    }
+
+                    val bstop = bus_stop(name_data, busses.toList(), fbusses, deps.toList());
+
+                    runOnUiThread {
+                        val ta = findViewById<RecyclerView>(R.id.rec_transit);
+                        val adapt = ta.adapter as transit_adapter;
+                        adapt.add_stop(bstop);
+                    }
+                    //Log.println(Log.DEBUG, "data", data);
+                }
+                catch(e : Exception)
+                {
+                    Log.println(Log.DEBUG, "err", "${e.message}, ${e.printStackTrace()}");
+                }
+            }
+            runOnUiThread {
+                transit_update_post();
+            }
+        };
+    }
+    fun transit_update()
+    {
+        val text_v16 = findViewById<TextView>(R.id.view16);
+        var dm = create_gregorian().get(Calendar.DAY_OF_MONTH);
+        val sdfmt = day_to_sdfmt(dm);
+        val s = sdfmt.format(create_gregorian().getTime());
+        text_v16.text = s;
+
+        //transit_update_post();
+        try {
+            cache_view?.all_stops?.removeObserver(stop_observer);
+        }catch(e : Exception) {}
+        Log.println(Log.DEBUG, "busdata", "release");
+        bus_data.release();
+        cache_view?.all_stops?.observe(this, stop_observer);
+        //bus_data.release();
+    }
+    fun transit_loader_update()
+    {
+        val webview = findViewById<WebView>(R.id.wviewt);
+        webview.onResume();
+        webview.resumeTimers();
+        webview.settings.javaScriptEnabled = true;
+        webview.settings.domStorageEnabled = true;
+        val exb = findViewById<Button>(R.id.share11);
+        exb.setOnClickListener {
+            wview_clear(webview);
+            init_login_nt();
+            ui_timetable();
+        }
+
+        var fcst = findViewById<Button>(R.id.share12);
+        fcst.setOnClickListener {
+            wview_clear(webview);
+            setContentView(R.layout.activity_weather);
+            forecast_update();
+        }
+
+        var back = findViewById<Button>(R.id.share14);
+        back.setOnClickListener {
+            webview.goBack();
+        }
+        var fwd = findViewById<Button>(R.id.share16);
+        fwd.setOnClickListener {
+            webview.goForward();
+        }
+        var selc = findViewById<Button>(R.id.share17)
+        selc.setOnClickListener {
+            var url_s = webview.url;
+            if(url_s == null)
+            {
+                AlertDialog.Builder(this).setTitle("URL Error").setMessage("No URL was able to be recieved, please reload the transit page.").setPositiveButton(android.R.string.ok, null).show();
+                return@setOnClickListener;
+            }
+            if(url_s.startsWith("https://www.bluestarbus.co.uk/stops/") == false)
+            {
+                AlertDialog.Builder(this).setTitle("Wrong URL").setMessage("The current URL was formatted incorrectly. Did you follow the steps for choosing a bus stop correctly?").setPositiveButton(android.R.string.ok, null).show();
+                return@setOnClickListener;
+            }
+            Log.println(Log.DEBUG, "rl", "$url_s");
+            url_s = url_s.removePrefix("https://www.bluestarbus.co.uk/stops/");
+            val idx = url_s.indexOf('/');
+            if(idx >= 0)
+                url_s = url_s.substring(0, idx-1);
+
+            Log.println(Log.DEBUG, "rl", "stop id $url_s");
+            webview?.evaluateJavascript("(function(){let return_val = \"\"; try { const welcome_string = document.getElementsByClassName(\"place-info-banner__name\")[0].textContent.trim(); return_val = welcome_string; } catch(e) {} return return_val;})();", object : ValueCallback<String?> {
+                override fun onReceiveValue(p0: String?) {
+                    var ustring = JSONTokener(p0).nextValue() as String;
+                    ustring = ustring.replace("\\s+".toRegex(), " ").lines().joinToString("").trim();
+                    Log.println(Log.DEBUG, "recname", "rec ${p0} real ${ustring}");
+                    //fi.handle_user(p0!!);
+                    mod_count.addAndGet(1);
+                    cache_view?.insert_stop(bus_stop_ids(url_s, ustring));
+                    runOnUiThread {
+                        setContentView(R.layout.activity_transit);
+                        transit_update();
+                    }
+                }
+            });
+        }
+
+        var info = findViewById<Button>(R.id.share15)
+        info.setOnClickListener {
+            AlertDialog.Builder(this).setTitle("Information").setMessage("Select a bus stop and press departures. Once a bus stop is selected, press the button \"SELECTED\"").setPositiveButton(android.R.string.ok, null).show();
+            //Toast.makeText(this, "Select a bus stop and press departures. Once a bus stop is selected, press the button \"SELECTED\"", Toast.LENGTH_LONG).show();
+        }
+        webview.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(
+                view: WebView,
+                request: WebResourceRequest
+            ): Boolean {
+                view.loadUrl(request.url.toString());
+                return false;
+            }
+        }
+        webview.loadUrl("https://www.bluestarbus.co.uk/explore?center=${latt}%2C${longt}&zoom=16.24");
+    }
     @SuppressLint("ClickableViewAccessibility")
     fun forecast_update()
     {
@@ -1117,6 +1728,20 @@ class focus_main : AppCompatActivity() {
         exb.setOnClickListener {
             init_login_nt();
             ui_timetable();
+        }
+
+        val trs = findViewById<Button>(R.id.share10);
+        trs.setOnClickListener {
+            if(cache_view?.all_stops?.value?.size == 0) {
+                setContentView(R.layout.activity_transit_loader);
+                transit_loader_update();
+            }
+            else
+            {
+                // nah
+                setContentView(R.layout.activity_transit);
+                transit_update();
+            }
         }
 
         button2.setOnClickListener {
@@ -1152,9 +1777,14 @@ class focus_main : AppCompatActivity() {
                 }
             }
 
-            override fun onDoubleClick() {
+            override fun onDoubleClick(e : MotionEvent) {
                 val tst = create_gregorian();
-                date.set(Calendar.DAY_OF_WEEK, tst.get(Calendar.DAY_OF_WEEK));
+                if(e.x < scv.width/8)
+                    date.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY);
+                else if(e.x > (scv.width*7)/8)
+                    date.set(Calendar.DAY_OF_WEEK, Calendar.SUNDAY);
+                else
+                    date.set(Calendar.DAY_OF_WEEK, tst.get(Calendar.DAY_OF_WEEK));
                 forecast_update_texts();
             }
 
@@ -1203,6 +1833,19 @@ class focus_main : AppCompatActivity() {
             }
             hide_friends = isc;
         }
+
+        val vbox = findViewById<CheckBox>(R.id.checkBox76);
+        vbox.isChecked = visibile_busses;
+        vbox.setOnClickListener {
+            val isc = vbox.isChecked;
+            with(shared_prefs?.edit()!!)
+            {
+                putBoolean("visibile_busses", isc);
+                apply();
+            }
+            visibile_busses = isc;
+        }
+
         val warn_b = findViewById<TextView>(R.id.textView3);
         val w2box = findViewById<CheckBox>(R.id.checkBox3);
         w2box.isChecked = weather_locale;
@@ -1218,7 +1861,6 @@ class focus_main : AppCompatActivity() {
                 putBoolean("weather_locale", isc);
                 apply();
             }
-
         }
 
         val spnr = findViewById<Spinner>(R.id.spinner2);
@@ -1285,6 +1927,7 @@ class focus_main : AppCompatActivity() {
             var spn = findViewById<Spinner>(R.id.spinner);
             var vsp = findViewById<LinearLayout>(R.id.wther);
             var fcst = findViewById<Button>(R.id.share6);
+            var trs = findViewById<Button>(R.id.share9);
             if(!weather)
                 fcst.visibility = View.GONE;
             else
@@ -1358,6 +2001,18 @@ class focus_main : AppCompatActivity() {
             fcst.setOnClickListener {
                 setContentView(R.layout.activity_weather);
                 forecast_update();
+            }
+            trs.setOnClickListener {
+                if(cache_view?.all_stops?.value?.size == 0) {
+                    setContentView(R.layout.activity_transit_loader);
+                    transit_loader_update();
+                }
+                else
+                {
+                    // nah
+                    setContentView(R.layout.activity_transit);
+                    transit_update();
+                }
             }
             //rref.setOnClickListener {
             //    cache_view?.clear_all();
@@ -1443,9 +2098,14 @@ class focus_main : AppCompatActivity() {
                     }
                 }
 
-                override fun onDoubleClick() {
+                override fun onDoubleClick(e : MotionEvent) {
                     val tst = create_gregorian();
-                    date.set(Calendar.DAY_OF_WEEK, tst.get(Calendar.DAY_OF_WEEK));
+                    if(e.x < scv.width/8)
+                        date.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY);
+                    else if(e.x > (scv.width*7)/8)
+                        date.set(Calendar.DAY_OF_WEEK, Calendar.SUNDAY);
+                    else
+                        date.set(Calendar.DAY_OF_WEEK, tst.get(Calendar.DAY_OF_WEEK));
                     var dm = date.get(Calendar.DAY_OF_MONTH);
                     var sdfmt = when (dm % 10) {
                         1 -> sdfmt1;
@@ -1815,6 +2475,29 @@ class focus_main : AppCompatActivity() {
         lat.d = location.latitude;
         return true;
     }
+    fun is_connected() : Boolean
+    {
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager;
+        val nw      = cm.activeNetwork ?: return false
+        val actNw = cm.getNetworkCapabilities(nw) ?: return false
+        return when {
+            actNw.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> true
+            actNw.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> true
+            actNw.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> true
+            actNw.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH) -> true
+            else -> false
+        }
+    }
+    fun wait_for_network()
+    {
+        for(i in 0 until 5)
+        {
+            if(is_connected())
+                return;
+            Thread.sleep(1000);
+        }
+        throw Exception("No network available");
+    }
     fun load_weather(cont : () -> Unit)
     {
         // haha fuck your location settings
@@ -1829,6 +2512,7 @@ class focus_main : AppCompatActivity() {
                 var longd : fuck_you_kotlin = fuck_you_kotlin(0.0);
                 var latitude : Double;
                 var longitude : Double;
+                wait_for_network();
                 if(!get_long_lat_fixed(longd, latd))
                     if(!get_long_lat_net(longd, latd))
                         get_long_lat_ip(longd, latd);
@@ -2048,6 +2732,8 @@ class focus_main : AppCompatActivity() {
         setContentView(R.layout.activity_focus_get)
         web_view = findViewById<WebView>(R.id.web);
         web_view!!.alpha = 1.0f;
+        web_view!!.onResume();
+        web_view!!.resumeTimers();
 
         web_view!!.settings.javaScriptEnabled = true;
         web_view!!.settings.domStorageEnabled = true;
@@ -2084,7 +2770,7 @@ class focus_main : AppCompatActivity() {
                         return;
                     view?.evaluateJavascript("(function(){let return_val = \"\"; try { return_val = localStorage.getItem(\"focus_inject_data\"); } catch(e) {throw e;} return return_val; })();", object : ValueCallback<String?> {
                         override fun onReceiveValue(p0: String?) {
-                            val ustring = org.json.JSONTokener(p0).nextValue() as String
+                            val ustring = JSONTokener(p0).nextValue() as String
                             fi.handle_post(url, ustring);
                         }
                     })
@@ -2340,6 +3026,14 @@ class focus_main : AppCompatActivity() {
         weather = shared_prefs?.getBoolean("weather_enabled", true)!!;
         hide_friends = shared_prefs?.getBoolean("hide_friends", false)!!;
         weather_locale = shared_prefs?.getBoolean("weather_locale", false)!!;
+        visibile_busses = shared_prefs?.getBoolean("visibile_busses", true)!!;
+
+        bus_stopped.drainPermits();
+        bus_stopped.tryAcquire();
+
+        bus_data.drainPermits();
+        bus_data.tryAcquire();
+        cache_view?.all_stops?.observe(this, stop_observer);
 
         setContentView(R.layout.activity_focus_main)
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
