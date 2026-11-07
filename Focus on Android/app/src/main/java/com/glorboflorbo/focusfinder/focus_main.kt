@@ -27,15 +27,20 @@ import android.net.NetworkInfo
 import android.net.Uri
 import android.net.http.NetworkException
 import android.os.Bundle
+import android.os.CountDownTimer
 import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
+import android.text.Editable
 import android.util.Log
 import android.view.GestureDetector
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.RotateAnimation
+import android.view.inputmethod.EditorInfo
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
@@ -47,8 +52,10 @@ import android.widget.AdapterView.OnItemSelectedListener
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
@@ -95,6 +102,7 @@ import org.json.JSONObject
 import org.json.JSONTokener
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.InterruptedIOException
 import java.lang.Integer.min
 import java.math.BigInteger
 import java.net.URL
@@ -502,6 +510,21 @@ class transit_adapter : RecyclerView.Adapter<transit_adapter.ViewHolder>
     {
         ctx = c;
         infl = LayoutInflater.from(ctx);
+    }
+    fun clear_stops()
+    {
+        val l_ = list.size;
+        val fl = flist.size;
+        list.clear();
+        flist.clear();
+
+        if(fl <= 0 && (!visibile_busses || l_ <= 0))
+            return;
+
+        if(visibile_busses)
+            super.notifyItemRangeRemoved(0, l_);
+        else
+            super.notifyItemRangeRemoved(0, fl);
     }
 
     fun add_stop(stop : focus_main.bus_stop)
@@ -1080,6 +1103,8 @@ class focus_main : AppCompatActivity() {
     var dweather_hash = Hashtable<Int, Drawable>();
     var current_temp : Double = 0.0;
     var mod_count : AtomicInt = AtomicInt(0);
+    val alive_sem = Semaphore(-1);
+    var transit_refresh = 30;
     val stop_observer : Observer<List<bus_stop_ids>> = Observer { cur_view ->
         val stop_ac = acquire_stop();
         if(stop_ac == 0)
@@ -1440,10 +1465,13 @@ class focus_main : AppCompatActivity() {
         }
         bus_stopped.release();
     }
-    fun transit_update_post()
+    fun transit_update_post(th : Thread, ct : CountDownTimer)
     {
         val exb = findViewById<Button>(R.id.share18);
         exb.setOnClickListener {
+            th.interrupt();
+            ct.cancel();
+            alive_sem.acquire();
             bus_stopped.acquire();
             init_login_nt();
             ui_timetable();
@@ -1451,6 +1479,9 @@ class focus_main : AppCompatActivity() {
 
         var fcst = findViewById<Button>(R.id.share19);
         fcst.setOnClickListener {
+            th.interrupt();
+            ct.cancel();
+            alive_sem.acquire();
             bus_stopped.acquire();
             setContentView(R.layout.activity_weather);
             forecast_update();
@@ -1458,6 +1489,9 @@ class focus_main : AppCompatActivity() {
 
         val addn = findViewById<Button>(R.id.share21);
         addn.setOnClickListener {
+            th.interrupt();
+            ct.cancel();
+            alive_sem.acquire();
             bus_stopped.acquire();
             setContentView(R.layout.activity_transit_loader);
             transit_loader_update();
@@ -1465,6 +1499,10 @@ class focus_main : AppCompatActivity() {
 
         var set = findViewById<Button>(R.id.share22);
         set.setOnClickListener {
+            th.interrupt();
+            ct.cancel();
+            alive_sem.acquire();
+            bus_stopped.acquire();
             setContentView(R.layout.activity_settings);
             settings_update();
         }
@@ -1516,10 +1554,26 @@ class focus_main : AppCompatActivity() {
     fun transit_do_thread(data_live : List<bus_stop_ids>)
     {
         val datac = data_live.toList();
-        thread(isDaemon = true) {
+        var _th : Thread? = null;
+        var ct : CountDownTimer? = null;
+        val th = thread(isDaemon = true, start = false) {
             Log.println(Log.DEBUG, "len", "l ${datac.size}");
 
             runOnUiThread {
+                val pb = findViewById<ProgressBar>(R.id.progressBar);
+                pb.max = transit_refresh*100;
+                ct = object : CountDownTimer((transit_refresh*1000).toLong(), 10) {
+                    override fun onFinish() {
+                        this.start();
+                    }
+
+                    override fun onTick(p0: Long) {
+                        pb.progress = (p0 / 10).toInt();
+                    }
+
+                };
+                ct.start();
+                transit_update_post(_th!!, ct);
                 val adapt = transit_adapter(this);
                 val ta = findViewById<RecyclerView>(R.id.rec_transit);
                 var ly : LinearLayoutManager = LinearLayoutManager(ta.context);
@@ -1529,78 +1583,109 @@ class focus_main : AppCompatActivity() {
                 ta.adapter = adapt;
             }
 
-            val stops : ArrayList<bus_stop> = ArrayList<bus_stop>();
-            for(i in 0 until datac.size)
-            {
-                //Log.println(Log.DEBUG, "fetch", "data i $i");
-                try {
-                    val deps : ArrayList<bus_stop_departure> = ArrayList<bus_stop_departure>();
-                    val busses : ArrayList<String> = ArrayList<String>();
-                    val fbusses = ArrayList<String>();
-                    val data = fetch_bus_stop(datac[i].stop_id)!!;
-                    val name_data = transit_h1_body(data, "place-info-banner__name");
+            while(true) {
 
-                    Log.println(Log.DEBUG, "name", "stop name : $name_data");
+                var _i : Boolean = false;
+                runOnUiThread {
+                    val ta = findViewById<RecyclerView>(R.id.rec_transit);
+                    val adapt = ta.adapter as transit_adapter;
+                    adapt.clear_stops();
+                }
+                val stops: ArrayList<bus_stop> = ArrayList<bus_stop>();
+                for (i in 0 until datac.size) {
+                    //Log.println(Log.DEBUG, "fetch", "data i $i");
+                    try {
+                        val deps: ArrayList<bus_stop_departure> = ArrayList<bus_stop_departure>();
+                        val busses: ArrayList<String> = ArrayList<String>();
+                        val fbusses = ArrayList<String>();
+                        val data = fetch_bus_stop(datac[i].stop_id)!!;
+                        val name_data = transit_h1_body(data, "place-info-banner__name");
 
-                    val pstops_list = data.substring(data.indexOf("place-info-banner__block-list"));
-                    val astops_list = pstops_list.substring(pstops_list.indexOf(">")+1);
+                        Log.println(Log.DEBUG, "name", "stop name : $name_data");
 
-                    val stops_list = astops_list.split("<div class=\"line-block__contents\">");
-                    Log.println(Log.DEBUG, "stops_list cnt : ", "${stops_list.size}");
-                    for(s in stops_list.stream().skip(1))
-                    {
-                        val stop_data = s.substring(0, s.indexOf("</div>")).replace("\n", " ").trim();
-                        Log.println(Log.DEBUG, "stop has", "stop $stop_data");
-                        busses.add(stop_data);
-                        if(stop_data in special_busses)
-                            fbusses.add(stop_data);
-                    }
+                        val pstops_list =
+                            data.substring(data.indexOf("place-info-banner__block-list"));
+                        val astops_list = pstops_list.substring(pstops_list.indexOf(">") + 1);
 
-                    if(data.indexOf("There are no departures available for this stop at the moment.") < 0)
-                    {
-                        val depb = transit_ol_body(data, "departure-board");
-                        val depb_list = depb.split("departure-board__item");
-
-                        for(s in depb_list.stream().skip(1))
-                        {
-                            val entry = s.substring(s.indexOf(">")+1);
-
-                            val name = transit_item_body("div", entry, "single-visit__name");
-                            val desc = transit_item_body("div", entry, "single-visit__description");
-                            val arriv_body = transit_item_body("div", entry, "single-visit__arrival-time");
-
-                            var arriv = arriv_body.substring(arriv_body.indexOf("<div class=\"single-visit__arrival-time__cell\">")+46);
-
-                            var cancelled = false;
-                            try {
-                                val cicon = transit_item_body("div", entry, "single-visit__icon");
-                                cancelled = cicon.contains("Cancelled");
-                            }catch(e: Exception){}
-
-                            if(cancelled) arriv = "Cancelled";
-                            deps.add(bus_stop_departure(name, desc, arriv));
-                            Log.println(Log.DEBUG, "data", "bus $name desc $desc arrival time $arriv")
+                        val stops_list = astops_list.split("<div class=\"line-block__contents\">");
+                        Log.println(Log.DEBUG, "stops_list cnt : ", "${stops_list.size}");
+                        for (s in stops_list.stream().skip(1)) {
+                            val stop_data =
+                                s.substring(0, s.indexOf("</div>")).replace("\n", " ").trim();
+                            Log.println(Log.DEBUG, "stop has", "stop $stop_data");
+                            busses.add(stop_data);
+                            if (stop_data in special_busses)
+                                fbusses.add(stop_data);
                         }
+
+                        if (data.indexOf("There are no departures available for this stop at the moment.") < 0) {
+                            val depb = transit_ol_body(data, "departure-board");
+                            val depb_list = depb.split("departure-board__item");
+
+                            for (s in depb_list.stream().skip(1)) {
+                                val entry = s.substring(s.indexOf(">") + 1);
+
+                                val name = transit_item_body("div", entry, "single-visit__name");
+                                val desc =
+                                    transit_item_body("div", entry, "single-visit__description");
+                                val arriv_body =
+                                    transit_item_body("div", entry, "single-visit__arrival-time");
+
+                                var arriv =
+                                    arriv_body.substring(arriv_body.indexOf("<div class=\"single-visit__arrival-time__cell\">") + 46);
+
+                                var cancelled = false;
+                                try {
+                                    val cicon =
+                                        transit_item_body("div", entry, "single-visit__icon");
+                                    cancelled = cicon.contains("Cancelled");
+                                } catch (e: Exception) {
+                                }
+
+                                if (cancelled) arriv = "Cancelled";
+                                deps.add(bus_stop_departure(name, desc, arriv));
+                                Log.println(
+                                    Log.DEBUG,
+                                    "data",
+                                    "bus $name desc $desc arrival time $arriv"
+                                )
+                            }
+                        }
+
+                        val bstop = bus_stop(name_data, busses.toList(), fbusses, deps.toList());
+
+                        runOnUiThread {
+                            val ta = findViewById<RecyclerView>(R.id.rec_transit);
+                            val adapt = ta.adapter as transit_adapter;
+                            adapt.add_stop(bstop);
+                        }
+                        //Log.println(Log.DEBUG, "data", data);
+                    } catch (e: Exception) {
+                        if(e is InterruptedException || e is InterruptedIOException) {
+                            _i = true;
+                            break;
+                        }
+                        Log.println(Log.DEBUG, "err", "${e.message}, ${e.printStackTrace()}");
                     }
-
-                    val bstop = bus_stop(name_data, busses.toList(), fbusses, deps.toList());
-
+                }
+                if(_i)
+                    break;
+                try {
                     runOnUiThread {
-                        val ta = findViewById<RecyclerView>(R.id.rec_transit);
-                        val adapt = ta.adapter as transit_adapter;
-                        adapt.add_stop(bstop);
+                        ct!!.cancel();
+                        ct.start();
                     }
-                    //Log.println(Log.DEBUG, "data", data);
-                }
-                catch(e : Exception)
-                {
-                    Log.println(Log.DEBUG, "err", "${e.message}, ${e.printStackTrace()}");
+                    Thread.sleep((transit_refresh * 1000).toLong());
+                } catch (e: Exception) {
+                    if(e is InterruptedException || e is InterruptedIOException)
+                        break;
                 }
             }
-            runOnUiThread {
-                transit_update_post();
-            }
+            alive_sem.release();
+            Log.println(Log.DEBUG, "alive", "interrupted");
         };
+        _th = th;
+        th.start();
     }
     fun transit_update()
     {
@@ -1810,6 +1895,36 @@ class focus_main : AppCompatActivity() {
             cache_view?.clear_all();
             do_login();
         }
+        val tri = findViewById<EditText>(R.id.editTextNumber);
+        tri.setText(transit_refresh.toString());
+
+        tri.setOnEditorActionListener { view, i, event ->
+            if(i == EditorInfo.IME_ACTION_SEARCH ||
+i == EditorInfo.IME_ACTION_DONE ||
+                event != null &&
+                event.getAction() == KeyEvent.ACTION_DOWN &&
+                event.getKeyCode() == KeyEvent.KEYCODE_ENTER) {
+
+                try {
+                    val num = view.text.toString().toInt();
+                    if(num !in 10..100)
+                        throw Exception();
+
+                    with(shared_prefs?.edit()!!)
+                    {
+                        putInt("transit_refresh", num);
+                        apply();
+                    }
+                    transit_refresh = num;
+                } catch (e : Exception)
+                {
+                    AlertDialog.Builder(this).setTitle("Invalid input").setMessage("The refresh rate must be an integer between 10 and 100.").setPositiveButton(android.R.string.ok, null).show();
+                }
+                return@setOnEditorActionListener true;
+            }
+            false;
+        }
+
         val wbox = findViewById<CheckBox>(R.id.weather_box);
         wbox.isChecked = weather;
         wbox.setOnClickListener {
@@ -3027,9 +3142,13 @@ class focus_main : AppCompatActivity() {
         hide_friends = shared_prefs?.getBoolean("hide_friends", false)!!;
         weather_locale = shared_prefs?.getBoolean("weather_locale", false)!!;
         visibile_busses = shared_prefs?.getBoolean("visibile_busses", true)!!;
+        transit_refresh = shared_prefs?.getInt("transit_refresh", 30)!!;
 
         bus_stopped.drainPermits();
         bus_stopped.tryAcquire();
+
+        alive_sem.drainPermits();
+        alive_sem.tryAcquire();
 
         bus_data.drainPermits();
         bus_data.tryAcquire();
