@@ -20,7 +20,8 @@ It supports
 * Sharing your timetable to your friends
 * Telling you whether you share any free periods with your friends
 * Telling you the weather through a dedicated forecast tab
-* Has a settings menu for enabling/disabling specific features and reseting data
+* Has a settings menu for enabling/disabling specific features and resetting data
+* Busses serviced by your bus stops, and departure times of busses. 
 
 It is written in Kotlin.
 
