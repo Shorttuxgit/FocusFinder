@@ -9,7 +9,7 @@
 
     <ScrollView
         android:id="@+id/scroll_view"
-        android:layout_width="190dp"
+        android:layout_width="0dp"
         android:layout_height="190dp"
         android:layout_marginStart="1dp"
         android:layout_marginEnd="1dp"
@@ -68,6 +68,7 @@
                 android:background="@color/design_default_color_on_primary" />
 
             <LinearLayout
+                android:id="@+id/v1view"
                 android:layout_width="match_parent"
                 android:layout_height="120dp"
                 android:layout_weight="0.5"
@@ -180,6 +181,7 @@
                 android:background="@color/design_default_color_on_primary" />
 
             <LinearLayout
+                android:id="@+id/v2view"
                 android:layout_width="match_parent"
                 android:layout_height="120dp"
                 android:orientation="vertical">
@@ -291,6 +293,7 @@
                 android:background="@color/design_default_color_on_primary" />
 
             <LinearLayout
+                android:id="@+id/v3view"
                 android:layout_width="match_parent"
                 android:layout_height="120dp"
                 android:orientation="vertical">
@@ -399,6 +402,7 @@
                 android:background="@color/design_default_color_on_primary" />
 
             <LinearLayout
+                android:id="@+id/v4view"
                 android:layout_width="match_parent"
                 android:layout_height="120dp"
                 android:orientation="vertical">
@@ -505,6 +509,30 @@
                 android:layout_width="match_parent"
                 android:layout_height="2dp"
                 android:background="@color/design_default_color_on_primary" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="horizontal">
+
+                <Space
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1" />
+
+                <Button
+                    android:id="@+id/share"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:backgroundTint="@android:color/system_control_normal_light"
+                    app:icon="?attr/actionModeShareDrawable"
+                    app:iconGravity="textStart"
+                    app:iconTint="@color/white" />
+            </LinearLayout>
+
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="60dp" />
 
         </LinearLayout>
     </ScrollView>

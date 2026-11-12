@@ -56,4 +56,5 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     implementation(libs.geckoview)
     implementation(libs.androidx.wear)
+    implementation (libs.zxing.android.embedded)
 }

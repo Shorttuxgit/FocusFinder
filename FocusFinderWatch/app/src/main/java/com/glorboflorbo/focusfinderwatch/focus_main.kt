@@ -1,21 +1,54 @@
 package com.glorboflorbo.focusfinderwatch
 
 import android.annotation.SuppressLint
+import android.app.Application
+import android.content.ClipData
+import android.content.ContentProvider
+import android.content.ContentValues
+import android.content.Context
+import android.content.DialogInterface
+import android.content.Intent
+import android.content.SharedPreferences
+import android.content.UriMatcher
+import android.content.res.AssetFileDescriptor
+import android.database.Cursor
+import android.database.MatrixCursor
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.ColorFilter
+import android.graphics.Paint
+import android.graphics.PixelFormat
+import android.graphics.drawable.Drawable
+import android.media.MediaMetadata
+import android.net.Uri
 import android.os.Bundle
+import android.os.ParcelFileDescriptor
+import android.provider.OpenableColumns
+import android.util.Base64
 import android.util.Log
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.View
-import android.webkit.CookieManager
-import android.webkit.JavascriptInterface
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.EditText
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.content.edit
+import androidx.core.graphics.drawable.toBitmap
+import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
 import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
@@ -26,36 +59,38 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverter
+import androidx.room.TypeConverters
+import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat
+import com.google.gson.Gson
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.MultiFormatWriter
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
+import com.journeyapps.barcodescanner.BarcodeEncoder
+import kotlinx.coroutines.launch
 import org.json.JSONArray
+import org.json.JSONObject
+import org.mozilla.geckoview.GeckoResult
+import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoView
+import org.mozilla.geckoview.StorageController
+import org.mozilla.geckoview.WebExtension
+import java.io.ByteArrayOutputStream
+import java.lang.Integer.min
+import java.math.BigInteger
+import java.net.CookieManager
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.GregorianCalendar
-import org.json.JSONObject
-import androidx.lifecycle.viewModelScope
-import android.app.Application
-import android.content.Context
-import android.view.GestureDetector
-import android.view.MotionEvent
-import android.widget.ScrollView
-import androidx.appcompat.app.AppCompatDelegate
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.ViewModelProvider
-import androidx.room.TypeConverter
-import androidx.room.TypeConverters
-import kotlinx.coroutines.launch
-import com.google.gson.Gson
-import kotlinx.coroutines.sync.Mutex
-import org.mozilla.geckoview.AllowOrDeny
-import org.mozilla.geckoview.GeckoResult
-import org.mozilla.geckoview.GeckoRuntime
-import org.mozilla.geckoview.GeckoRuntimeSettings
-import org.mozilla.geckoview.GeckoSession
-import org.mozilla.geckoview.GeckoView
-import org.mozilla.geckoview.WebExtension
-import java.lang.Integer.min
 import java.util.Locale
+import java.util.concurrent.Executors
+import java.util.zip.GZIPOutputStream
+import kotlin.concurrent.atomics.AtomicInt
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.decrementAndFetch
 import kotlin.math.abs
-import kotlin.system.exitProcess
 
 class timetable_event
 {
@@ -96,6 +131,23 @@ class timetable_day
             }
         }
     }
+    fun describe_cmpr() : String
+    {
+        var se : String = "";
+        for(i in 0 until 4)
+        {
+            var ev = events[i]!!;
+            var str_b = desc_sdfmt.format(ev.time_start.getTime());
+            var str_a = desc_sdfmt.format(ev.time_end.getTime());
+            var s : String;
+            if(ev.title == "Personal Development" || ev.title == "Study Period")
+                s = "${str_b}@${str_a}@${ev.title};";
+            else
+                s = "${str_b}@${str_a}@${ev.title}@${ev.room}@${ev.staff};";
+            se += s;
+        }
+        return se;
+    }
     fun describe() : String
     {
         var se : String = "";
@@ -126,8 +178,8 @@ class timetable_day
                 var room = data[3];
                 var staff = data[4];
 
-                var ts_date = (desc_sdfmt.parse(ts));
-                var te_date = (desc_sdfmt.parse(te));
+                var ts_date = (desc_sdfmt.parse(ts)!!);
+                var te_date = (desc_sdfmt.parse(te)!!);
 
                 var time_start = GregorianCalendar();
                 var time_end = GregorianCalendar();
@@ -158,6 +210,8 @@ data class week_day_list
 data class week_cached
 (
     @PrimaryKey val week_id : Int,
+    @ColumnInfo val person_name : String,
+    @ColumnInfo val is_main : Boolean,
     @ColumnInfo val week_days : week_day_list,
 )
 
@@ -176,17 +230,15 @@ interface week_dao
     fun get_all() : LiveData<List<week_cached>>;
     @Query("SELECT * FROM week_cached WHERE week_id IN (:week_ids)")
     fun get_by_week(week_ids : IntArray) : List<week_cached>;
-
     @Insert
     suspend fun insert_week(vararg week_days : week_cached);
-
     @Delete
     suspend fun delete_week(week_day : week_cached);
     @Query("DELETE FROM week_cached")
     suspend fun delete_all();
 }
 @TypeConverters(value = [week_list_converter::class])
-@Database(entities = [week_cached::class], version = 1, exportSchema = false)
+@Database(entities = [week_cached::class], version = 2, exportSchema = false)
 abstract class week_database : RoomDatabase()
 {
     abstract fun get_week_dao() : week_dao;
@@ -198,7 +250,7 @@ abstract class week_database : RoomDatabase()
         {
             return INSTANCE ?: synchronized(this)
             {
-                val instance = Room.databaseBuilder(ctx.applicationContext, week_database::class.java, "week_database").build();
+                val instance = Room.databaseBuilder(ctx.applicationContext, week_database::class.java, "week_database").fallbackToDestructiveMigration().build();
                 INSTANCE = instance;
                 instance;
             }
@@ -240,14 +292,16 @@ class timetable_view
     var vtime : TextView;
     var vtime2 : TextView;
     var vstaff : TextView;
+    var vview : LinearLayout;
     var sdfmt : SimpleDateFormat = SimpleDateFormat("HH:mm");
-    constructor(vt : TextView, vt2 : TextView, vr : TextView, vs : TextView, vtl : TextView)
+    constructor(vt : TextView, vt2 : TextView, vr : TextView, vs : TextView, vtl : TextView, vv : LinearLayout)
     {
         vstaff = vs;
         vtitle = vtl;
         vroom = vr;
         vtime = vt;
         vtime2 = vt2;
+        vview = vv;
     }
     fun set_info(ev: timetable_event)
     {
@@ -260,6 +314,13 @@ class timetable_view
         vroom.text = "room: ${ev.room}";
         vtitle.text = "${ev.title}";
         vstaff.text = "staff: ${ev.staff}";
+
+        val cl = vview.context.resources.getColor(R.color.blue_dark);
+
+        if(ev.title == "Study Period" || ev.title == "Personal Development")
+            vview.setBackgroundColor(cl);
+        else
+            vview.setBackgroundColor(Color.TRANSPARENT);
     }
 }
 abstract class gesture_swipe : View.OnTouchListener
@@ -327,6 +388,9 @@ class focus_main : AppCompatActivity() {
     var nulltimetable_day : timetable_day? = null;
     var cache_view : week_view? = null;
     var port : WebExtension.Port? = null;
+    var shared_prefs : SharedPreferences? = null;
+    var person_name = "";
+
     fun update_texts()
     {
         var d = date.get(Calendar.DAY_OF_WEEK) - 2;
@@ -342,6 +406,220 @@ class focus_main : AppCompatActivity() {
             views[i]?.set_info(day?.events[i]!!);
         }
 
+    }
+    fun compress_94(event : String) : String
+    {
+        var bos : ByteArrayOutputStream = ByteArrayOutputStream(event.length);
+        var gz : GZIPOutputStream = GZIPOutputStream(bos);
+        gz.write(event.toByteArray());
+        gz.close();
+        var ba = bos.toByteArray();
+        bos.close();
+
+
+        var ascii_atlas = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
+        var output = StringBuilder();
+        var bi : BigInteger = BigInteger(ba);
+        //Log.println(Log.DEBUG, "ba2", "${ba.joinToString()} $bi");
+        var sz = BigInteger("${ascii_atlas.length}");
+        var zr = BigInteger("0");
+        while(bi>zr)
+        {
+            var id = (bi % sz).intValueExact();
+            output.append(ascii_atlas[id]);
+            bi /= sz;
+        }
+        return output.toString();
+    }
+    fun gen_qr_code(data : String)
+    {
+        setContentView(R.layout.activity_qrcode_viewer);
+
+        val ex = findViewById<Button>(R.id.exit_2);
+        ex.setOnClickListener {
+            init_view_login();
+            ui_timetable();
+        }
+        var bc = MultiFormatWriter();
+        try {
+
+            val hints = mapOf(
+                EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M,
+                EncodeHintType.MARGIN to 0
+            )
+            val bm = bc.encode(data, BarcodeFormat.QR_CODE, 0, 0, hints);
+
+            val rec = bm.enclosingRectangle;
+            val b_left = rec[0];
+            val b_top = rec[1];
+            val b_width = rec[2];
+            val b_height = rec[3];
+
+            //Log.println(Log.DEBUG, "ltwh", "$b_left $b_top $b_width $b_height");
+
+            val dw : Drawable = object : Drawable()
+            {
+                private val black_paint: Paint = Paint().apply { setARGB(255, 0, 0, 0) }
+                private val white_paint: Paint = Paint().apply { setARGB(255, 255, 255, 255) }
+                private val debug_paint: Paint = Paint().apply { setARGB(255, 0, 255, 0) }
+                override fun draw(p0: Canvas) {
+                    val width: Int = bounds.width()
+                    val height: Int = bounds.height()
+                    val offx = width.coerceAtMost(height).toFloat() / (b_width+20);
+                    val offy = width.coerceAtMost(height).toFloat() / (b_height+20);
+
+                    val mx = (width.toFloat() - offx*(b_width+20))/(2*offx);
+                    val my = (height.toFloat() - offy*(b_height+20))/(2*offy);
+                    Log.println(Log.DEBUG, "wh", "$width v $height");
+                    p0.drawRect(mx*offx, my*offy, offx*(b_width+mx+20), offy*(b_height+my+20), white_paint);
+
+                    for(y in 0 until b_height)
+                    {
+                        for(x in 0 until b_width)
+                        {
+                            val bit = bm.get(x+b_left, y+b_top);
+                            if(bit)
+                                p0.drawRect((x+10+mx)*offx, (y+10+my)*offy, (x+11+mx)*offx, (y+11+my)*offy, black_paint);
+                            //p0.drawCircle(x * off, y * off, radius, black_paint);
+                        }
+                    }
+                }
+
+                @Deprecated("Deprecated in Java")
+                override fun getOpacity(): Int {
+                    return PixelFormat.OPAQUE;
+                }
+
+                override fun setAlpha(p0: Int) {
+
+                }
+
+                override fun setColorFilter(p0: ColorFilter?) {
+
+                }
+
+            }
+            //val bitmap = bc.encodeBitmap(data, BarcodeFormat.QR_CODE, 150, 150, hints);
+            val iv = findViewById<ImageView>(R.id.qr_code);
+            iv.setImageDrawable(dw);
+        } catch(e : Exception)
+        {
+
+
+        }
+    }
+    fun do_share()
+    {
+        var weekd = nulltimetable_day;
+
+        var final = StringBuilder();
+        final.append(date.timeInMillis/1000/60/60/24);
+        final.append("^");
+        final.append(person_name);
+        final.append("^");
+        for(i in 0 until 6)
+        {
+            var event = days[i]!!.describe_cmpr();
+            final.append(event);
+            final.append("^");
+        }
+
+        var output : String = final.toString();
+        for(i in 0 until 1) {
+            output = compress_94(output)
+        }
+
+        gen_qr_code(output);
+
+        //var cp : ClipData = ClipData.newPlainText("Timetable Share", output);
+        Log.println(Log.DEBUG, "tg", "compressed day:   ${output}");
+        Log.println(Log.DEBUG, "tg", "uncompressed day: ${final.toString()}");
+    }
+    @SuppressLint("ClickableViewAccessibility")
+    fun ui_timetable()
+    {
+        runOnUiThread {
+            var tview = findViewById<TextView>(R.id.view7);
+            val scv = findViewById<ScrollView>(R.id.scroll_view);
+            var exit = findViewById<Button>(R.id.exit);
+            var shareb = findViewById<Button>(R.id.share);
+            var dm = date.get(Calendar.DAY_OF_MONTH);
+            var sdfmt = when (dm % 10) {
+                1 -> sdfmt1;
+                2 -> sdfmt2;
+                3 -> sdfmt3;
+                else -> {
+                    sdfmt4; }
+            }
+            if (dm >= 11 && dm <= 13)
+                sdfmt = sdfmt4;
+            val s = sdfmt.format(date.getTime());
+            tview.text = s;
+            exit.setOnClickListener {
+                finishAndRemoveTask();
+                android.os.Process.killProcess(android.os.Process.myPid());
+            }
+            shareb.setOnClickListener {
+                do_share();
+            }
+            scv.setOnTouchListener(object : gesture_swipe(this) {
+                override fun onSwipeRight() {
+                    if(date.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
+                        date.add(Calendar.DATE, -1);
+                        var dm = date.get(Calendar.DAY_OF_MONTH);
+                        var sdfmt = when (dm % 10) {
+                            1 -> sdfmt1;
+                            2 -> sdfmt2;
+                            3 -> sdfmt3;
+                            else -> {
+                                sdfmt4; }
+                        }
+                        if (dm >= 11 && dm <= 13)
+                            sdfmt = sdfmt4;
+                        val s = sdfmt.format(date.getTime());
+                        tview.text = s;
+                        update_texts();
+                    }
+                }
+
+                override fun onDoubleClick() {
+                    date = GregorianCalendar();
+                    var dm = date.get(Calendar.DAY_OF_MONTH);
+                    var sdfmt = when (dm % 10) {
+                        1 -> sdfmt1;
+                        2 -> sdfmt2;
+                        3 -> sdfmt3;
+                        else -> {
+                            sdfmt4; }
+                    }
+                    if (dm >= 11 && dm <= 13)
+                        sdfmt = sdfmt4;
+                    val s = sdfmt.format(date.getTime());
+                    tview.text = s;
+                    update_texts();
+                }
+
+                override fun onSwipeLeft() {
+                    if(date.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
+                        date.add(Calendar.DATE, 1);
+                        var dm = date.get(Calendar.DAY_OF_MONTH);
+                        var sdfmt = when (dm % 10) {
+                            1 -> sdfmt1;
+                            2 -> sdfmt2;
+                            3 -> sdfmt3;
+                            else -> {
+                                sdfmt4; }
+                        }
+                        if (dm >= 11 && dm <= 13)
+                            sdfmt = sdfmt4;
+                        val s = sdfmt.format(date.getTime());
+                        tview.text = s;
+                        update_texts();
+                    }
+                }
+            })
+            update_texts();
+        }
     }
     @SuppressLint("ClickableViewAccessibility")
     fun update_timetable(events: JSONArray)
@@ -419,88 +697,9 @@ class focus_main : AppCompatActivity() {
         if(g.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY && firstDayInt == Calendar.SUNDAY)
             week_id--;
 
-        var cache_save = week_cached(week_id, wlist);
+        var cache_save = week_cached(week_id, person_name, true, wlist);
 
         cache_view?.insert(cache_save);
-
-        runOnUiThread {
-            var tview = findViewById<TextView>(R.id.view7);
-            val scv = findViewById<ScrollView>(R.id.scroll_view);
-            var exit = findViewById<Button>(R.id.exit);
-            var dm = date.get(Calendar.DAY_OF_MONTH);
-            var sdfmt = when (dm % 10) {
-                1 -> sdfmt1;
-                2 -> sdfmt2;
-                3 -> sdfmt3;
-                else -> {
-                    sdfmt4; }
-            }
-            if (dm >= 11 && dm <= 13)
-                sdfmt = sdfmt4;
-            val s = sdfmt.format(date.getTime());
-            tview.text = s;
-            exit.setOnClickListener {
-                finishAndRemoveTask();
-                android.os.Process.killProcess(android.os.Process.myPid());
-            }
-            scv.setOnTouchListener(object : gesture_swipe(this) {
-                override fun onSwipeRight() {
-                    if(date.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
-                        date.add(Calendar.DATE, -1);
-                        var dm = date.get(Calendar.DAY_OF_MONTH);
-                        var sdfmt = when (dm % 10) {
-                            1 -> sdfmt1;
-                            2 -> sdfmt2;
-                            3 -> sdfmt3;
-                            else -> {
-                                sdfmt4; }
-                        }
-                        if (dm >= 11 && dm <= 13)
-                            sdfmt = sdfmt4;
-                        val s = sdfmt.format(date.getTime());
-                        tview.text = s;
-                        update_texts();
-                    }
-                }
-
-                override fun onDoubleClick() {
-                    date = GregorianCalendar();
-                    var dm = date.get(Calendar.DAY_OF_MONTH);
-                    var sdfmt = when (dm % 10) {
-                        1 -> sdfmt1;
-                        2 -> sdfmt2;
-                        3 -> sdfmt3;
-                        else -> {
-                            sdfmt4; }
-                    }
-                    if (dm >= 11 && dm <= 13)
-                        sdfmt = sdfmt4;
-                    val s = sdfmt.format(date.getTime());
-                    tview.text = s;
-                    update_texts();
-                }
-
-                override fun onSwipeLeft() {
-                    if(date.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
-                        date.add(Calendar.DATE, 1);
-                        var dm = date.get(Calendar.DAY_OF_MONTH);
-                        var sdfmt = when (dm % 10) {
-                            1 -> sdfmt1;
-                            2 -> sdfmt2;
-                            3 -> sdfmt3;
-                            else -> {
-                                sdfmt4; }
-                        }
-                        if (dm >= 11 && dm <= 13)
-                            sdfmt = sdfmt4;
-                        val s = sdfmt.format(date.getTime());
-                        tview.text = s;
-                        update_texts();
-                    }
-                }
-            })
-            update_texts();
-        }
     }
     fun load_timetable()
     {
@@ -531,14 +730,18 @@ class focus_main : AppCompatActivity() {
             }
         }
     }
-    fun init_login()
+    fun init_view_login()
     {
         setContentView(R.layout.activity_focus_main);
 
-        views[0] = timetable_view(findViewById<TextView>(R.id.v1time), findViewById<TextView>(R.id.v1time2), findViewById<TextView>(R.id.v1room), findViewById<TextView>(R.id.v1staff), findViewById<TextView>(R.id.v1title));
-        views[1] = timetable_view(findViewById<TextView>(R.id.v2time), findViewById<TextView>(R.id.v2time2), findViewById<TextView>(R.id.v2room), findViewById<TextView>(R.id.v2staff), findViewById<TextView>(R.id.v2title));
-        views[2] = timetable_view(findViewById<TextView>(R.id.v3time), findViewById<TextView>(R.id.v3time2), findViewById<TextView>(R.id.v3room), findViewById<TextView>(R.id.v3staff), findViewById<TextView>(R.id.v3title));
-        views[3] = timetable_view(findViewById<TextView>(R.id.v4time), findViewById<TextView>(R.id.v4time2), findViewById<TextView>(R.id.v4room), findViewById<TextView>(R.id.v4staff), findViewById<TextView>(R.id.v4title));
+        views[0] = timetable_view(findViewById<TextView>(R.id.v1time), findViewById<TextView>(R.id.v1time2), findViewById<TextView>(R.id.v1room), findViewById<TextView>(R.id.v1staff), findViewById<TextView>(R.id.v1title), findViewById<LinearLayout>(R.id.v1view));
+        views[1] = timetable_view(findViewById<TextView>(R.id.v2time), findViewById<TextView>(R.id.v2time2), findViewById<TextView>(R.id.v2room), findViewById<TextView>(R.id.v2staff), findViewById<TextView>(R.id.v2title), findViewById<LinearLayout>(R.id.v2view));
+        views[2] = timetable_view(findViewById<TextView>(R.id.v3time), findViewById<TextView>(R.id.v3time2), findViewById<TextView>(R.id.v3room), findViewById<TextView>(R.id.v3staff), findViewById<TextView>(R.id.v3title), findViewById<LinearLayout>(R.id.v3view));
+        views[3] = timetable_view(findViewById<TextView>(R.id.v4time), findViewById<TextView>(R.id.v4time2), findViewById<TextView>(R.id.v4room), findViewById<TextView>(R.id.v4staff), findViewById<TextView>(R.id.v4title), findViewById<LinearLayout>(R.id.v4view));
+    }
+    fun init_login()
+    {
+        init_view_login();
 
         var c1 = GregorianCalendar(0,0,0,8,45);
         var c2 = GregorianCalendar(0,0,0,10,15);
@@ -611,8 +814,103 @@ class focus_main : AppCompatActivity() {
         webview.loadUrl(url_target);*/
 
     }
-    fun load_gecko()
+    fun load_password()
     {
+        setContentView(R.layout.activity_password);
+        val pass = findViewById<EditText>(R.id.editTextText2);
+
+        val user = findViewById<EditText>(R.id.editTextText);
+
+        val bsk = findViewById<Button>(R.id.button);
+        bsk.setOnClickListener {
+            AlertDialog.Builder(this).setTitle("Confirmation")
+                .setMessage("Are you sure you would like to skip?")
+                .setPositiveButton(android.R.string.ok, object : DialogInterface.OnClickListener {
+                    override fun onClick(p0: DialogInterface?, p1: Int) {
+                        load_gecko(true);
+                        //name = shared_prefs?.getString("user_name", null);
+                        //pass = shared_prefs?.getString("user_password", null);
+                    }
+
+                }).setNegativeButton(android.R.string.cancel, null).show();
+        }
+
+        val but = findViewById<Button>(R.id.button7);
+        but.setOnClickListener {
+            var passw = pass.text.toString();
+            var usern = user.text.toString();
+
+            if(usern.length <= 0) {
+                AlertDialog.Builder(this).setTitle("Invalid input")
+                    .setMessage("Email length must be greater than 0")
+                    .setPositiveButton(android.R.string.ok, null).show();
+                return@setOnClickListener
+            }
+            val bo = usern.endsWith("@barton.ac.uk", true);
+            if(!bo)
+            {
+                AlertDialog.Builder(this).setTitle("Invalid input")
+                    .setMessage("Email address must end with @barton.ac.uk domain")
+                    .setPositiveButton(android.R.string.ok, null).show();
+                return@setOnClickListener
+            }
+
+            if(passw.length <= 0) {
+                AlertDialog.Builder(this).setTitle("Invalid input")
+                    .setMessage("Password length must be greater than 0")
+                    .setPositiveButton(android.R.string.ok, null).show();
+                return@setOnClickListener
+            }
+
+            val ptext = if(passw.length <= 2) passw else "${passw[0]}${"*".repeat(passw.length-2)}${passw[passw.length-1]}";
+            AlertDialog.Builder(this).setTitle("Confirmation")
+                .setMessage("Are you sure the email address ${usern} and password ${ptext} length ${passw.length} are correct?")
+                .setPositiveButton(android.R.string.ok, object : DialogInterface.OnClickListener {
+                    override fun onClick(p0: DialogInterface?, p1: Int) {
+                        with(shared_prefs?.edit()!!)
+                        {
+                            putString("user_name", usern);
+                            putString("user_password", passw);
+                            apply();
+                        }
+                        load_gecko(false);
+                        //name = shared_prefs?.getString("user_name", null);
+                        //pass = shared_prefs?.getString("user_password", null);
+                    }
+
+                }).setNegativeButton(android.R.string.cancel, null).show();
+        }
+
+        val x_ex = findViewById<Button>(R.id.button8)
+        x_ex.setOnClickListener {
+            finishAndRemoveTask();
+            android.os.Process.killProcess(android.os.Process.myPid());
+        }
+    }
+    var gecko_port : WebExtension.Port? = null;
+    @OptIn(ExperimentalAtomicApi::class)
+    fun load_gecko(skip_pass : Boolean)
+    {
+        var name : String? = "";
+        var pass : String? = "";
+        if(!skip_pass) {
+            name = shared_prefs?.getString("user_name", null);
+            pass = shared_prefs?.getString("user_password", null);
+            if (name == null || pass == null)
+                return load_password();
+        }
+
+        setContentView(R.layout.activity_focus_get);
+
+        val x_ex = findViewById<Button>(R.id.button6);
+        x_ex.setOnClickListener {
+            finishAndRemoveTask();
+            android.os.Process.killProcess(android.os.Process.myPid());
+        }
+
+        val WQHYFFSDYHIASADS = findViewById<Button>(R.id.button4);
+        WQHYFFSDYHIASADS.visibility = View.GONE;
+
         var gecko_view : GeckoView = findViewById<GeckoView>(R.id.geckoview);
 
         var gecko_session : GeckoSession = GeckoSession();
@@ -622,31 +920,55 @@ class focus_main : AppCompatActivity() {
         //gecko_session.loadUri("https://focus.barton.ac.uk");
         gecko_session.settings.allowJavascript = true;
 
+
         val port_delegate = object : WebExtension.PortDelegate {
             override fun onPortMessage(message: Any, port: WebExtension.Port) {
                 super.onPortMessage(message, port)
 
-                lbody = message.toString();
-
-                runOnUiThread {
-                    gecko_view.let {
-                        gecko_view.releaseSession()?.close();
-                    };
-                    gecko_session.close();
-
-                    init_login();
-
-                    Log.println(Log.DEBUG,"tag", "lbody: ${lbody}");
-
-                    load_timetable();
+                if(port == gecko_port)
+                {
+                    person_name = message.toString().removePrefix("Welcome Back, ").replace("\n", "").trim();
+                    Log.println(Log.DEBUG, "rec", "person_name : $person_name");
                 }
+                else
+                {
+                    lbody = message.toString();
+
+                    runOnUiThread {
+                        gecko_view.let {
+                            gecko_view.releaseSession()?.close();
+                        };
+                        gecko_session.close();
+
+                        init_login();
+
+                        Log.println(Log.DEBUG, "tag", "lbody: ${lbody}");
+
+                        load_timetable();
+                    }
+                }
+            }
+
+            override fun onDisconnect(port: WebExtension.Port) {
+                super.onDisconnect(port)
+                if(gecko_port == port)
+                    gecko_port = null;
             }
         }
 
         val message_delegate = object : WebExtension.MessageDelegate {
             override fun onConnect(port: WebExtension.Port) {
                 super.onConnect(port);
-                //Log.println(Log.DEBUG, "ttt", "onConnect");
+                Log.println(Log.DEBUG, "ttt", "onConnect ${port.name} ${port.sender.webExtension.id}");
+                if(port.sender.webExtension.id == "passwd@slungomatic.com" && !skip_pass) {
+                    gecko_port = port;
+                    Log.println(Log.DEBUG, "got pwd", "paswd");
+                    val message = JSONObject()
+                    message.put("username", "$name");
+                    message.put("password", "$pass");
+
+                    port.postMessage(message);
+                }
                 port.setDelegate(port_delegate);
             }
         }
@@ -668,9 +990,19 @@ class focus_main : AppCompatActivity() {
 
             if(builtInExtensions.isEmpty())
             {
-                gecko_runtime.webExtensionController.ensureBuiltIn("resource://android/assets/bingus/", "inject@slungomatic.com")
-                    .accept { extension -> extension?.setMessageDelegate( message_delegate, "browser");continue_login(gecko_runtime, gecko_session, gecko_view);
-                    };
+                val atomic_cnt = AtomicInt(2);
+                gecko_runtime.webExtensionController.ensureBuiltIn("resource://android/assets/bingus/", "inject@slungomatic.com").accept {
+                    ext -> ext?.setMessageDelegate(message_delegate, "browser");
+                    if(atomic_cnt.decrementAndFetch() <= 0) {
+                        continue_login(gecko_runtime, gecko_session, gecko_view);
+                    }
+                }
+                gecko_runtime.webExtensionController.ensureBuiltIn("resource://android/assets/read_data/", "passwd@slungomatic.com").accept {
+                    ext -> ext?.setMessageDelegate(message_delegate, "browser");
+                    if(atomic_cnt.decrementAndFetch() <= 0) {
+                        continue_login(gecko_runtime, gecko_session, gecko_view);
+                    }
+                }
             }
             else
             {
@@ -678,9 +1010,22 @@ class focus_main : AppCompatActivity() {
                     gecko_runtime.webExtensionController.uninstall(extension)
                 }
                 GeckoResult.allOf(uninstallTasks).accept {
-                    gecko_runtime.webExtensionController.ensureBuiltIn("resource://android/assets/fuckingwork/", "inject@slungomatic.com")
+                    val atomic_cnt = AtomicInt(2);
+                    gecko_runtime.webExtensionController.ensureBuiltIn("resource://android/assets/bingus/", "inject@slungomatic.com").accept {
+                            ext -> ext?.setMessageDelegate(message_delegate, "browser");
+                        if(atomic_cnt.decrementAndFetch() <= 0) {
+                            continue_login(gecko_runtime, gecko_session, gecko_view);
+                        }
+                    }
+                    gecko_runtime.webExtensionController.ensureBuiltIn("resource://android/assets/read_data/", "passwd@slungomatic.com").accept {
+                            ext -> ext?.setMessageDelegate(message_delegate, "browser");
+                        if(atomic_cnt.decrementAndFetch() <= 0) {
+                            continue_login(gecko_runtime, gecko_session, gecko_view);
+                        }
+                    }
+                    /*gecko_runtime.webExtensionController.ensureBuiltIn("resource://android/assets/fuckingwork/", "inject@slungomatic.com")
                         .accept { extension -> extension?.setMessageDelegate(message_delegate, "browser");continue_login(gecko_runtime, gecko_session, gecko_view);
-                        };
+                        };*/
                 }
             }
         }
@@ -690,10 +1035,12 @@ class focus_main : AppCompatActivity() {
     {
         Log.println(Log.DEBUG, "tg", "week: ${week}");
         if(week == null) {
-            load_gecko();
+            load_gecko(false);
             return false;
         }
         init_login();
+
+        person_name = week.person_name;
 
         for(i in 0 until 6)
         {
@@ -709,84 +1056,7 @@ class focus_main : AppCompatActivity() {
             days[week.week_day]?.interpret(week.week_day_data);
         }
 
-        runOnUiThread {
-            var tview = findViewById<TextView>(R.id.view7);
-            var dm = date.get(Calendar.DAY_OF_MONTH);
-            val scv = findViewById<ScrollView>(R.id.scroll_view);
-            var exit = findViewById<Button>(R.id.exit);
-            var sdfmt = when(dm % 10)
-            {
-                1 -> sdfmt1;
-                2 -> sdfmt2;
-                3 -> sdfmt3;
-                else -> {sdfmt4;}
-            }
-            if(dm >= 11 && dm <= 13)
-                sdfmt = sdfmt4;
-            val s = sdfmt.format(date.getTime());
-            tview.text = s;
-            exit.setOnClickListener {
-                finishAndRemoveTask();
-                android.os.Process.killProcess(android.os.Process.myPid());
-            }
-            scv.setOnTouchListener(object : gesture_swipe(this) {
-                override fun onSwipeRight() {
-                    if(date.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
-                        date.add(Calendar.DATE, -1);
-                        var dm = date.get(Calendar.DAY_OF_MONTH);
-                        var sdfmt = when (dm % 10) {
-                            1 -> sdfmt1;
-                            2 -> sdfmt2;
-                            3 -> sdfmt3;
-                            else -> {
-                                sdfmt4; }
-                        }
-                        if (dm >= 11 && dm <= 13)
-                            sdfmt = sdfmt4;
-                        val s = sdfmt.format(date.getTime());
-                        tview.text = s;
-                        update_texts();
-                    }
-                }
-
-                override fun onDoubleClick() {
-                    date = GregorianCalendar();
-                    var dm = date.get(Calendar.DAY_OF_MONTH);
-                    var sdfmt = when (dm % 10) {
-                        1 -> sdfmt1;
-                        2 -> sdfmt2;
-                        3 -> sdfmt3;
-                        else -> {
-                            sdfmt4; }
-                    }
-                    if (dm >= 11 && dm <= 13)
-                        sdfmt = sdfmt4;
-                    val s = sdfmt.format(date.getTime());
-                    tview.text = s;
-                    update_texts();
-                }
-
-                override fun onSwipeLeft() {
-                    if(date.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
-                        date.add(Calendar.DATE, 1);
-                        var dm = date.get(Calendar.DAY_OF_MONTH);
-                        var sdfmt = when (dm % 10) {
-                            1 -> sdfmt1;
-                            2 -> sdfmt2;
-                            3 -> sdfmt3;
-                            else -> {
-                                sdfmt4; }
-                        }
-                        if (dm >= 11 && dm <= 13)
-                            sdfmt = sdfmt4;
-                        val s = sdfmt.format(date.getTime());
-                        tview.text = s;
-                        update_texts();
-                    }
-                }
-            })
-            update_texts();
-        }
+        ui_timetable();
         return true;
     }
     fun continue_login(gecko_runtime : GeckoRuntime, gecko_session : GeckoSession, gecko_view : GeckoView)
@@ -833,6 +1103,8 @@ class focus_main : AppCompatActivity() {
                 }
             }
         }
+
+
 
         gecko_session.open(gecko_runtime);
         gecko_view.setSession(gecko_session);
@@ -892,6 +1164,7 @@ class focus_main : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
         cache_view = ViewModelProvider(this)[week_view::class.java];
+        shared_prefs = this.getPreferences(Context.MODE_PRIVATE);
         enableEdgeToEdge()
         setContentView(R.layout.activity_focus_get)
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->

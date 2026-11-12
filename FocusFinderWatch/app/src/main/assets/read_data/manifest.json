@@ -1,0 +1,25 @@
+{
+  "manifest_version": 2,
+  "name": "passwd_js",
+  "version": "1.0",
+  "description": "Inject password to enter.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "passwd@slungomatic.com"
+    }
+  },
+  "background":
+  {
+    "scripts": ["content_script.js"]
+  },
+  "permissions": [
+    "nativeMessaging",
+    "nativeMessagingFromContent",
+    "geckoViewAddons",
+    "webRequest",
+    "webRequestBlocking",
+    "webRequestFilterResponse",
+    "webNavigation",
+    "<all_urls>"
+  ]
+}
