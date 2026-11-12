@@ -1920,7 +1920,6 @@ i == EditorInfo.IME_ACTION_DONE ||
                 {
                     AlertDialog.Builder(this).setTitle("Invalid input").setMessage("The refresh rate must be an integer between 10 and 100.").setPositiveButton(android.R.string.ok, null).show();
                 }
-                return@setOnEditorActionListener true;
             }
             false;
         }
