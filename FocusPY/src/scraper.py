@@ -16,17 +16,26 @@ def load_cached_timetable():
         with open(CACHE_FILE, "r") as f:
             data = json.load(f)
             if data.get("week_commencing") == get_current_week_sunday():
-                return data.get("events", []), data.get("student_name", "Student")
+                # Caches written before grades were added have no "progress" key,
+                # so treat them as stale and fetch again.
+                if "progress" not in data:
+                    return None
+                return (
+                    data.get("events", []),
+                    data.get("student_name", "Student"),
+                    data.get("progress", []),
+                )
     except Exception:
         pass
     return None
 
-def save_cached_timetable(events, student_name):
+def save_cached_timetable(events, student_name, progress=None):
     try:
         data = {
             "week_commencing": get_current_week_sunday(),
             "student_name": student_name,
-            "events": events
+            "events": events,
+            "progress": progress or []
         }
         with open(CACHE_FILE, "w") as f:
             json.dump(data, f, indent=2)
@@ -47,8 +56,72 @@ def extract_events(livewire_responses):
                     events.extend(evt_list)
     return events
 
+PROGRESS_JS = """
+() => Array.from(document.querySelectorAll('div.mb-8')).map(section => {
+    const title = section.querySelector('h1');
+    const table = section.querySelector('table');
+    if (!title || !table) return null;
+
+    const rows = table.querySelectorAll('tr');
+    if (rows.length < 3) return null;
+
+    const periods = [];
+    Array.from(rows[0].querySelectorAll('th')).slice(1).forEach(th => {
+        const span = parseInt(th.getAttribute('colspan') || '1', 10);
+        for (let i = 0; i < span; i++) periods.push(th.innerText.trim());
+    });
+
+    const labels = Array.from(rows[1].querySelectorAll('th')).slice(1)
+        .map(th => th.innerText.trim());
+
+    const columns = Array.from(rows[2].querySelectorAll('td')).slice(1).map((td, i) => {
+        const values = Array.from(td.querySelectorAll('div')).map(d => d.innerText.trim());
+        return {
+            period: periods[i] || '',
+            label: labels[i] || '',
+            grade: values[0] || '',
+            ttg: values[1] || '',
+            commit: values[2] || ''
+        };
+    });
+
+    return { title: title.innerText.trim(), columns: columns };
+}).filter(Boolean)
+"""
+
+
+def fetch_progress(page, base_url, logger_fn):
+    """Scrape the current grade, target grade and commitment for each course."""
+    try:
+        page.goto(base_url + "/progress")
+        page.wait_for_selector("div.mb-8 table", timeout=15000)
+        raw_courses = page.evaluate(PROGRESS_JS)
+    except Exception as error:
+        logger_fn(f"[!] Could not read the progress page: {error}")
+        return []
+
+    courses = []
+    for course in raw_courses:
+        # Use the most recent column that actually has a grade recorded.
+        filled = [c for c in course["columns"] if c["grade"] or c["ttg"]]
+        if not filled:
+            continue
+        latest = filled[-1]
+        courses.append({
+            "title": course["title"],
+            "period": latest["period"],
+            "label": latest["label"],
+            "grade": latest["grade"],
+            "ttg": latest["ttg"],
+            "commit": latest["commit"],
+        })
+
+    logger_fn(f"[+] Loaded grades for {len(courses)} course(s).")
+    return courses
+
+
 def perform_login(p, logger_fn):
-    logger_fn("\n" + "=" * 50, "Authentication Required")
+    logger_fn("\n" + "=" * 50, "Sign in using the browser window")
     logger_fn("ACTION REQUIRED: Complete login in the browser window.")
     logger_fn("=" * 50 + "\n")
 
@@ -70,8 +143,17 @@ def perform_login(p, logger_fn):
     logger_fn("[+] Login detected! Session saved.")
     browser.close()
 
-def fetch_timetable_data(sync_playwright_fn, logger_fn):
-    logger_fn("[*] Launching browser engine...", "Connecting to Focus portal...")
+TOTAL_WEEKS = 5
+
+
+def fetch_timetable_data(sync_playwright_fn, logger_fn, progress_fn=None):
+    def step(fraction, status):
+        # Log a human-readable step and move the loading bar forward
+        logger_fn(f"[*] {status}", status)
+        if progress_fn:
+            progress_fn(fraction)
+
+    step(0.10, "Connecting to Focus portal...")
 
     with sync_playwright_fn() as p:
         if not os.path.exists(SESSION_FILE):
@@ -120,6 +202,7 @@ def fetch_timetable_data(sync_playwright_fn, logger_fn):
             if not login_success:
                 return None
 
+        step(0.25, "Signed in. Reading your profile...")
         student_name = "Student"
         try:
             h1_text = page.locator("h1.text-3xl.font-bold").inner_text(timeout=5000)
@@ -135,9 +218,12 @@ def fetch_timetable_data(sync_playwright_fn, logger_fn):
         if i < 0:
             browser.close()
             return None
-        url = url[:i-len(url)] + "/timetable"
+        student_base = url[:i]
+        url = student_base + "/timetable"
 
+        step(0.30, "Opening your timetable...")
         page.goto(url)
+        step(0.35, f"Loading week 1 of {TOTAL_WEEKS}...")
         try:
             page.wait_for_selector("#powerCalendar", timeout=15000)
             page.wait_for_load_state("networkidle", timeout=10000)
@@ -148,7 +234,8 @@ def fetch_timetable_data(sync_playwright_fn, logger_fn):
         livewire_responses.clear()
 
         all_fetched = list(current_week_events)
-        for week_idx in range(4):
+        for week_idx in range(TOTAL_WEEKS - 1):
+            step(0.35 + 0.45 * (week_idx + 1) / TOTAL_WEEKS, f"Loading week {week_idx + 2} of {TOTAL_WEEKS}...")
             try:
                 page.click(".fc-next-button")
                 page.wait_for_timeout(2000)
@@ -159,5 +246,9 @@ def fetch_timetable_data(sync_playwright_fn, logger_fn):
             except Exception:
                 pass
 
+        step(0.88, "Collecting your grades...")
+        progress = fetch_progress(page, student_base, logger_fn)
+        step(0.97, "Finishing up...")
+
         browser.close()
-        return all_fetched, student_name
+        return all_fetched, student_name, progress

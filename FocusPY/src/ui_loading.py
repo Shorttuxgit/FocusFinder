@@ -27,8 +27,8 @@ class FocusFinderApp:
     def __init__(self, root):
         self.root = root
         self.root.title(f"FocusFinder {CURRENT_OS}")
-        self.root.geometry("780x580")
-        self.root.minsize(680, 680)
+        self.root.resizable(False, False)
+        self.center_window(400, 400)
         self.root.configure(fg_color=BG_DARK)
 
         apply_app_icon(self.root)
@@ -40,32 +40,50 @@ class FocusFinderApp:
         self.worker_thread = threading.Thread(target=self.bg_fetch_pipeline, daemon=True)
         self.worker_thread.start()
 
+    def center_window(self, width, height):
+        # Size the window and place it in the middle of the screen (DPI-aware)
+        self.root.update_idletasks()
+        scale = 1.0
+        try:
+            scale = self.root._get_window_scaling()
+        except Exception:
+            pass
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+        width = int(min(width, (screen_w - 40) / scale))
+        height = int(min(height, (screen_h - 100) / scale))
+        x = max(0, int((screen_w - width * scale) // 2))
+        y = max(0, int((screen_h - height * scale) // 2) - 20)
+        self.root.geometry(f"{width}x{height}+{x}+{y}")
+
     def setup_loading_screen(self):
+        # Compact square splash: name in the middle, status line and a thin bar at the bottom
         self.loading_frame = ctk.CTkFrame(self.root, fg_color=BG_DARK, corner_radius=0)
-        self.loading_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        self.loading_frame.pack(fill=tk.BOTH, expand=True)
 
-        header_card = ctk.CTkFrame(self.loading_frame, fg_color=BG_CARD, corner_radius=16)
-        header_card.pack(fill=tk.X, pady=(0, 15), ipadx=15, ipady=12)
+        self.progress = ctk.CTkProgressBar(
+            self.loading_frame, mode="determinate", progress_color=FG_ACCENT,
+            fg_color=BG_CARD, corner_radius=0, height=4
+        )
+        self.progress.pack(side=tk.BOTTOM, fill=tk.X)
+        self.progress.set(0)
 
-        title_label = ctk.CTkLabel(header_card, text="FocusFinder", font=("Arial", 22, "bold"), text_color=FG_TEXT)
-        title_label.pack(anchor="w", padx=15, pady=(10, 0))
+        self.status_var = tk.StringVar(value="Starting up...")
+        self.status_label = ctk.CTkLabel(
+            self.loading_frame, textvariable=self.status_var, font=("Arial", 11),
+            text_color=FG_SUBTEXT, wraplength=340
+        )
+        self.status_label.pack(side=tk.BOTTOM, pady=(0, 16))
 
-        self.status_var = tk.StringVar(value="Initializing background engine...")
-        self.status_label = ctk.CTkLabel(header_card, textvariable=self.status_var, font=("Arial", 12, "italic"), text_color=FG_SUBTEXT)
-        self.status_label.pack(anchor="w", padx=15, pady=(2, 10))
+        center = ctk.CTkFrame(self.loading_frame, fg_color="transparent")
+        center.place(relx=0.5, rely=0.42, anchor="center")
 
-        self.progress = ctk.CTkProgressBar(self.loading_frame, mode="indeterminate", progress_color=FG_ACCENT, fg_color=BG_SURFACE, corner_radius=8, height=12)
-        self.progress.pack(fill=tk.X, pady=(0, 15))
-        self.progress.start()
-
-        log_card = ctk.CTkFrame(self.loading_frame, fg_color=BG_CARD, corner_radius=16)
-        log_card.pack(fill=tk.BOTH, expand=True, ipadx=15, ipady=15)
-
-        log_heading = ctk.CTkLabel(log_card, text="Activity Log:", font=("Arial", 11, "bold"), text_color=FG_ACCENT)
-        log_heading.pack(anchor="w", padx=15, pady=(10, 6))
-
-        self.log_box = ctk.CTkTextbox(log_card, fg_color=BG_SURFACE, text_color=FG_GREEN, font=("Consolas", 11), corner_radius=12, border_width=1, border_color=BG_HOVER)
-        self.log_box.pack(fill=tk.BOTH, expand=True, padx=15, pady=(0, 15))
+        ctk.CTkLabel(
+            center, text="FocusFinder", font=("Arial", 28, "bold"), text_color=FG_ACCENT
+        ).pack()
+        ctk.CTkLabel(
+            center, text=f"for {CURRENT_OS}", font=("Arial", 11), text_color=FG_SUBTEXT
+        ).pack(pady=(2, 0))
 
     def gui_log(self, text, status_update=None):
         print(text, flush=True)
@@ -93,13 +111,14 @@ class FocusFinderApp:
             while True:
                 msg_type, content = self.msg_queue.get_nowait()
                 if msg_type == "LOG":
-                    self.log_box.insert(tk.END, content + "\n")
-                    self.log_box.see(tk.END)
+                    pass  # log lines still print to the console; the splash only shows status
                 elif msg_type == "STATUS":
                     self.status_var.set(content)
+                elif msg_type == "PROGRESS":
+                    self.progress.set(max(0.0, min(1.0, content)))
                 elif msg_type == "DONE":
-                    events, student_name = content
-                    self.transition_to_timetable(events, student_name)
+                    events, student_name, progress = content
+                    self.transition_to_timetable(events, student_name, progress)
                     return
                 elif msg_type == "ERROR":
                     self.progress.stop()
@@ -113,16 +132,19 @@ class FocusFinderApp:
     def bg_fetch_pipeline(self):
         try:
             self.gui_log(f"[*] Detected Operating System: {CURRENT_OS} ({platform.release()})")
-            self.gui_log("[*] Checking for weekly cached timetable...")
+            self.gui_log("[*] Checking for weekly cached timetable...", "Checking saved timetable...")
+            self.msg_queue.put(("PROGRESS", 0.02))
             cache_result = load_cached_timetable()
             
             if cache_result:
-                cached_events, student_name = cache_result
+                cached_events, student_name, progress = cache_result
                 self.gui_log(f"[+] Loaded {len(cached_events)} events from weekly cache!", "Cache loaded successfully!")
-                self.msg_queue.put(("DONE", (cached_events, student_name)))
+                self.msg_queue.put(("PROGRESS", 1.0))
+                self.msg_queue.put(("DONE", (cached_events, student_name, progress)))
                 return
 
-            self.gui_log("[*] No valid cache for this week. Connecting to portal...")
+            self.gui_log("[*] No valid cache for this week. Connecting to portal...", "Preparing browser engine...")
+            self.msg_queue.put(("PROGRESS", 0.04))
             try:
                 import playwright
             except ImportError:
@@ -135,18 +157,27 @@ class FocusFinderApp:
 
             self.run_cmd_with_logging([sys.executable, "-m", "playwright", "install", "chromium"], "Ensuring Playwright Chromium binaries")
             self.gui_log("[*] Environment checks complete.\n", "Environment verified.")
+            self.msg_queue.put(("PROGRESS", 0.08))
 
-            result = fetch_timetable_data(sync_playwright, self.gui_log)
+            result = fetch_timetable_data(
+                sync_playwright,
+                self.gui_log,
+                lambda fraction: self.msg_queue.put(("PROGRESS", fraction))
+            )
             if not result:
                 self.msg_queue.put(("ERROR", "No timetable events could be retrieved."))
             else:
-                events, student_name = result
-                save_cached_timetable(events, student_name)
-                self.msg_queue.put(("DONE", (events, student_name)))
+                events, student_name, progress = result
+                save_cached_timetable(events, student_name, progress)
+                self.msg_queue.put(("PROGRESS", 1.0))
+                self.msg_queue.put(("DONE", (events, student_name, progress)))
         except Exception as e:
             self.msg_queue.put(("ERROR", f"An error occurred: {str(e)}"))
 
-    def transition_to_timetable(self, events, student_name):
+    def transition_to_timetable(self, events, student_name, progress=None):
         self.progress.stop()
         self.loading_frame.destroy()
-        self.timetable_ui = TimetableWidget(self.root, events, student_name)
+        self.root.resizable(True, True)
+        self.root.minsize(700, 600)
+        self.center_window(820, 680)
+        self.timetable_ui = TimetableWidget(self.root, events, student_name, progress)
