@@ -11,6 +11,7 @@ import customtkinter as ctk
 from FocusPY.src.constants import CURRENT_OS, ICON_FILE, BG_DARK, BG_SURFACE, BG_CARD, BG_HOVER, FG_TEXT, FG_SUBTEXT, FG_ACCENT, FG_GREEN
 from FocusPY.src.scraper import load_cached_timetable, save_cached_timetable, fetch_timetable_data
 from FocusPY.src.ui_timetable import TimetableWidget
+from FocusPY.src.window_utils import get_monitor_bounds, centre_geometry
 
 def apply_app_icon(root):
     if os.path.exists(ICON_FILE):
@@ -40,20 +41,25 @@ class FocusFinderApp:
         self.worker_thread = threading.Thread(target=self.bg_fetch_pipeline, daemon=True)
         self.worker_thread.start()
 
-    def center_window(self, width, height):
-        # Size the window and place it in the middle of the screen (DPI-aware)
+    def center_window(self, width, height, around=None):
+        # Size the window and centre it on a single monitor (DPI-aware).
+        # `around` is a screen point; the monitor containing it is used, or the
+        # one under the mouse pointer when not given. If the monitor can't be
+        # worked out, only the size is set and the window manager picks the spot.
         self.root.update_idletasks()
+
         scale = 1.0
         try:
             scale = self.root._get_window_scaling()
         except Exception:
             pass
-        screen_w = self.root.winfo_screenwidth()
-        screen_h = self.root.winfo_screenheight()
-        width = int(min(width, (screen_w - 40) / scale))
-        height = int(min(height, (screen_h - 100) / scale))
-        x = max(0, int((screen_w - width * scale) // 2))
-        y = max(0, int((screen_h - height * scale) // 2) - 20)
+
+        bounds = get_monitor_bounds(self.root, around)
+        if bounds is None:
+            self.root.geometry(f"{width}x{height}")
+            return
+
+        width, height, x, y = centre_geometry(bounds, width, height, scale)
         self.root.geometry(f"{width}x{height}+{x}+{y}")
 
     def setup_loading_screen(self):
@@ -175,9 +181,16 @@ class FocusFinderApp:
             self.msg_queue.put(("ERROR", f"An error occurred: {str(e)}"))
 
     def transition_to_timetable(self, events, student_name, progress=None):
+        # Remember where the splash is so the main window opens on the same monitor
+        self.root.update_idletasks()
+        splash_centre = (
+            self.root.winfo_rootx() + self.root.winfo_width() // 2,
+            self.root.winfo_rooty() + self.root.winfo_height() // 2,
+        )
+
         self.progress.stop()
         self.loading_frame.destroy()
         self.root.resizable(True, True)
         self.root.minsize(700, 600)
-        self.center_window(820, 680)
+        self.center_window(820, 680, around=splash_centre)
         self.timetable_ui = TimetableWidget(self.root, events, student_name, progress)
