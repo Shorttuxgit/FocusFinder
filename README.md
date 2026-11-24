@@ -52,5 +52,4 @@ A port of Focus Finder on Android, with support for use on WearOS. Uses geckovie
 The timetable UI is also changed from Focus on Android to be more watch friendly, and uses gestures as its only way of navigation.
 
 
-## FocusHA
-A addon for HACS that lets users add FocusFinder to Home Assistant.
+
