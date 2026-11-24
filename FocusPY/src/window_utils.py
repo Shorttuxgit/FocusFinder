@@ -53,26 +53,64 @@ def _linux_monitors():
     return parse_xrandr(result.stdout)
 
 
+def _windows_work_area(point):
+    """Work area (monitor minus taskbar) of the monitor containing the point."""
+    import ctypes
+    from ctypes import wintypes
+
+    class MONITORINFO(ctypes.Structure):
+        _fields_ = [
+            ("cbSize", wintypes.DWORD),
+            ("rcMonitor", wintypes.RECT),
+            ("rcWork", wintypes.RECT),
+            ("dwFlags", wintypes.DWORD),
+        ]
+
+    user32 = ctypes.WinDLL("user32")
+    user32.MonitorFromPoint.argtypes = [wintypes.POINT, wintypes.DWORD]
+    user32.MonitorFromPoint.restype = ctypes.c_void_p
+    user32.GetMonitorInfoW.argtypes = [ctypes.c_void_p, ctypes.POINTER(MONITORINFO)]
+    user32.GetMonitorInfoW.restype = wintypes.BOOL
+
+    MONITOR_DEFAULTTONEAREST = 2
+    monitor = user32.MonitorFromPoint(wintypes.POINT(int(point[0]), int(point[1])), MONITOR_DEFAULTTONEAREST)
+
+    info = MONITORINFO()
+    info.cbSize = ctypes.sizeof(MONITORINFO)
+    if not monitor or not user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+        return None
+
+    work = info.rcWork
+    return work.left, work.top, work.right - work.left, work.bottom - work.top
+
+
 def get_monitor_bounds(root, around=None):
     """Return (x, y, width, height) of the monitor to centre on, or None if it
     can't be determined (the caller should then let the window manager decide).
 
     `around` is a screen point (x, y); by default the mouse pointer is used.
     """
-    if sys.platform.startswith("linux"):
-        point = around
-        if point is None:
-            try:
-                point = root.winfo_pointerxy()
-            except Exception:
-                point = (0, 0)
+    point = around
+    if point is None:
+        try:
+            point = root.winfo_pointerxy()
+        except Exception:
+            point = (0, 0)
 
+    if sys.platform.startswith("linux"):
         monitor = pick_monitor(_linux_monitors(), point)
         if monitor is None:
             return None
         return monitor["x"], monitor["y"], monitor["w"], monitor["h"]
 
-    # Windows reports the primary display, which is what we want there.
+    if sys.platform == "win32":
+        try:
+            area = _windows_work_area(point)
+        except Exception:
+            area = None
+        if area:
+            return area
+
     return 0, 0, root.winfo_screenwidth(), root.winfo_screenheight()
 
 

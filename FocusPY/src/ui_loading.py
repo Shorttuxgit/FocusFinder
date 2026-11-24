@@ -42,11 +42,11 @@ class FocusFinderApp:
         self.worker_thread.start()
 
     def center_window(self, width, height, around=None):
-        # Size the window and centre it on a single monitor (DPI-aware).
+        # Size the window and centre it on one monitor (DPI-aware).
         # `around` is a screen point; the monitor containing it is used, or the
-        # one under the mouse pointer when not given. If the monitor can't be
-        # worked out, only the size is set and the window manager picks the spot.
+        # one under the mouse pointer when not given.
         self.root.update_idletasks()
+        self._target = None
 
         scale = 1.0
         try:
@@ -55,12 +55,33 @@ class FocusFinderApp:
             pass
 
         bounds = get_monitor_bounds(self.root, around)
+
         if bounds is None:
-            self.root.geometry(f"{width}x{height}")
+            if around is None:
+                # Monitors can't be detected: only size it and let the window manager place it
+                self.root.geometry(f"{width}x{height}")
+                return
+
+            # Grow around the point instead, which keeps the window on the same screen
+            x = max(0, int(around[0] - width * scale / 2))
+            y = max(0, int(around[1] - height * scale / 2))
+        else:
+            width, height, x, y = centre_geometry(bounds, width, height, scale)
+
+        geometry = f"{width}x{height}+{x}+{y}"
+        self.root.geometry(geometry)
+        self._target = (geometry, x, y)
+
+    def correct_position(self):
+        # Some window managers move a window after it resizes; if this one did,
+        # put it back where center_window meant it to go
+        if not getattr(self, "_target", None):
             return
 
-        width, height, x, y = centre_geometry(bounds, width, height, scale)
-        self.root.geometry(f"{width}x{height}+{x}+{y}")
+        geometry, x, y = self._target
+        if abs(self.root.winfo_rootx() - x) > 60 or abs(self.root.winfo_rooty() - y) > 80:
+            self.root.geometry(geometry)
+            self.root.update()
 
     def setup_loading_screen(self):
         # Compact square splash: name in the middle, status line and a thin bar at the bottom
@@ -180,17 +201,58 @@ class FocusFinderApp:
         except Exception as e:
             self.msg_queue.put(("ERROR", f"An error occurred: {str(e)}"))
 
+    def hide_window(self):
+        # Make the window invisible without unmapping it, so Tk can still lay
+        # everything out at its real size. Falls back to withdrawing it.
+        try:
+            self.root.attributes("-alpha", 0.0)
+            return "alpha"
+        except tk.TclError:
+            self.root.withdraw()
+            return "withdraw"
+
+    def reveal_window(self, mode):
+        if mode == "alpha":
+            self.root.attributes("-alpha", 1.0)
+        else:
+            self.root.deiconify()
+
     def transition_to_timetable(self, events, student_name, progress=None):
-        # Remember where the splash is so the main window opens on the same monitor
+        # 1. Build the whole main window while the splash is still showing.
+        #    It stays off screen until it is finished.
+        self.status_var.set("Preparing your timetable...")
+        self.root.update_idletasks()
+
+        try:
+            timetable = TimetableWidget(self.root, events, student_name, progress, show=False)
+        except Exception as error:
+            self.progress.stop()
+            self.status_var.set("Error encountered.")
+            messagebox.showerror("Error", f"Could not build the timetable: {error}")
+            return
+
+        # 2. Swap splash for main window while the window is invisible, so the
+        #    resize, move and layout all happen before anyone can see them.
         self.root.update_idletasks()
         splash_centre = (
             self.root.winfo_rootx() + self.root.winfo_width() // 2,
             self.root.winfo_rooty() + self.root.winfo_height() // 2,
         )
 
-        self.progress.stop()
-        self.loading_frame.destroy()
-        self.root.resizable(True, True)
-        self.root.minsize(700, 600)
-        self.center_window(820, 680, around=splash_centre)
-        self.timetable_ui = TimetableWidget(self.root, events, student_name, progress)
+        mode = self.hide_window()
+        try:
+            self.progress.stop()
+            self.loading_frame.destroy()
+            self.root.resizable(True, True)
+            self.root.minsize(700, 600)
+            self.center_window(820, 680, around=splash_centre)
+
+            timetable.show()
+            self.root.update()              # let Tk apply the new size and layout
+            self.correct_position()         # undo any move the window manager made
+            timetable.finalize_layout()     # settle anything that depends on real sizes
+            self.root.update_idletasks()
+        finally:
+            self.reveal_window(mode)
+
+        self.timetable_ui = timetable

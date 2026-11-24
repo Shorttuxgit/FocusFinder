@@ -47,6 +47,45 @@ def resolve_grade_indices(scale, grade):
     return []
 
 
+def plan_markers(now_idxs, target_idx):
+    """Where the "Now" and "Target" labels go under the grade ladder.
+
+    Returns [(text, kind, column, span)], all meant for the same row. When the
+    target sits inside the highlighted range, "Now" is centred over the widest
+    run of highlighted grades beside it so the two labels never overlap.
+    """
+    now_idxs = sorted(now_idxs)
+
+    if not now_idxs:
+        return [("Target", "target", target_idx, 1)] if target_idx is not None else []
+
+    if target_idx is None:
+        return [("Now", "now", now_idxs[0], now_idxs[-1] - now_idxs[0] + 1)]
+
+    if target_idx not in now_idxs:
+        return [
+            ("Now", "now", now_idxs[0], now_idxs[-1] - now_idxs[0] + 1),
+            ("Target", "target", target_idx, 1),
+        ]
+
+    rest = [i for i in now_idxs if i != target_idx]
+    if not rest:
+        return [("Now • Target", "target", target_idx, 1)]
+
+    runs = []
+    for index in rest:
+        if runs and index == runs[-1][-1] + 1:
+            runs[-1].append(index)
+        else:
+            runs.append([index])
+    widest = max(runs, key=len)
+
+    return [
+        ("Now", "now", widest[0], len(widest)),
+        ("Target", "target", target_idx, 1),
+    ]
+
+
 def normalise_commit(value):
     value = (value or "").strip()
     return "★" if value in ("1*", "*", "★") else value
@@ -69,7 +108,7 @@ def fit_text(font, text, max_pixels):
 
 
 class TimetableWidget:
-    def __init__(self, root, events, student_name, progress=None):
+    def __init__(self, root, events, student_name, progress=None, show=True):
         self.root = root
         self.my_progress = progress or []
 
@@ -133,6 +172,11 @@ class TimetableWidget:
         self.create_widgets()
         self.update_display()
         self.root.bind("<Escape>", lambda _e: self.on_escape())
+
+        # With show=False everything is built but kept off screen, so the caller
+        # can reveal a finished window (see show / finalize_layout)
+        if show:
+            self.show()
 
     def update_time_format_variables(self):
         # Configure time format strings based on user preference
@@ -213,7 +257,6 @@ class TimetableWidget:
     def create_widgets(self):
         # Main application layout container
         self.main_container = ctk.CTkFrame(self.root, fg_color=BG_DARK, corner_radius=0)
-        self.main_container.pack(fill=tk.BOTH, expand=True, padx=16, pady=14)
 
         # Greeting box in its own separate centered card at the top
         greeting_card = ctk.CTkFrame(self.main_container, fg_color=BG_CARD, corner_radius=16)
@@ -303,6 +346,30 @@ class TimetableWidget:
         # Grades panel sits beneath the timetable
         self.progress_card = None
         self.build_progress_card()
+
+    def show(self):
+        # Put the finished interface on screen
+        self.main_container.pack(fill=tk.BOTH, expand=True, padx=16, pady=14)
+
+    def finalize_layout(self):
+        """Settle size-dependent layout once the window is at its final size.
+
+        Column widths and the course buttons depend on real widget sizes, which
+        are unknown until the window is on screen. Calling this before the
+        window becomes visible means nothing shifts after the user sees it.
+        """
+        for name in ("_refit_job", "_bar_job"):
+            job = getattr(self, name, None)
+            if job is not None:
+                self.root.after_cancel(job)
+                setattr(self, name, None)
+
+        self._tree_width = self.tree.winfo_width()
+        self._col_widths = None
+        self.render_rows()
+
+        if self.progress_card is not None:
+            self.layout_course_buttons()
 
     # ------------------------------------------------------------------
     # Timetable table
@@ -487,8 +554,10 @@ class TimetableWidget:
 
         self.show_course(0)
 
-        # Build the other courses while the app is idle so every click is instant
-        self.root.after(60, self.prebuild_course_blocks)
+        # Build every course now (this runs while the splash screen is up) so
+        # switching courses later never has to draw anything
+        for index in range(len(self.my_progress)):
+            self.get_course_block(index)
 
     def layout_course_buttons(self):
         # Flow the course buttons onto extra rows when they don't fit on one line
@@ -532,13 +601,6 @@ class TimetableWidget:
             block = self.build_course_block(self.course_area, self.my_progress[index])
             self.course_blocks[index] = block
         return block
-
-    def prebuild_course_blocks(self):
-        for index in range(len(self.my_progress)):
-            if index not in self.course_blocks:
-                self.get_course_block(index)
-                self.root.after(30, self.prebuild_course_blocks)
-                return
 
     def set_course_button_style(self, index, active):
         self.course_buttons[index].configure(
@@ -617,7 +679,6 @@ class TimetableWidget:
         target_idxs = resolve_grade_indices(scale, target)
         target_idx = target_idxs[0] if target_idxs else None
         now_start = min(now_idxs) if now_idxs else None
-        now_end = max(now_idxs) if now_idxs else None
 
         for i, label in enumerate(scale):
             bar.grid_columnconfigure(i, weight=1, uniform="grade")
@@ -644,23 +705,12 @@ class TimetableWidget:
                     fg_color=fill, corner_radius=6, height=24
                 ).grid(row=0, column=i, sticky="ew", padx=1)
 
-        def marker(text, color, row, column, span=1):
+        # "Now" and "Target" labels share one line under the ladder
+        colours = {"now": FG_ACCENT, "target": FG_GREEN}
+        for text, kind, column, span in plan_markers(now_idxs, target_idx):
             ctk.CTkLabel(
-                bar, text=text, font=("Arial", 9, "bold"), text_color=color, height=12
-            ).grid(row=row, column=column, columnspan=span, pady=(2, 0))
-
-        # "Now" is centred under every highlighted grade
-        if now_idxs:
-            span = now_end - now_start + 1
-            if span == 1 and target_idx == now_start:
-                marker("Now • Target", FG_GREEN, 1, now_start)
-            else:
-                marker("Now", FG_ACCENT, 1, now_start, span)
-                if target_idx is not None:
-                    inside = now_start <= target_idx <= now_end
-                    marker("Target", FG_GREEN, 2 if inside else 1, target_idx)
-        elif target_idx is not None:
-            marker("Target", FG_GREEN, 1, target_idx)
+                bar, text=text, font=("Arial", 9, "bold"), text_color=colours[kind], height=12
+            ).grid(row=1, column=column, columnspan=span, pady=(2, 0))
 
         return block
 
