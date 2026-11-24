@@ -1,7 +1,12 @@
+# --------------------------------------------------
+# Finding the right monitor and centring windows on it
+# --------------------------------------------------
+
 import re
 import subprocess
 import sys
 
+# One monitor line from `xrandr --query`, e.g. "HDMI-1 connected primary 1920x1080+0+0"
 _XRANDR_LINE = re.compile(
     r"^(?P<name>\S+) connected(?P<primary> primary)? "
     r"(?P<w>\d+)x(?P<h>\d+)\+(?P<x>-?\d+)\+(?P<y>-?\d+)",
@@ -9,19 +14,23 @@ _XRANDR_LINE = re.compile(
 )
 
 
+# --------------------------------------------------
+# Linux
+# --------------------------------------------------
+
 def parse_xrandr(output):
     """Return [{'name', 'primary', 'x', 'y', 'w', 'h'}] from `xrandr --query` text."""
-    monitors = []
-    for match in _XRANDR_LINE.finditer(output):
-        monitors.append({
+    return [
+        {
             "name": match.group("name"),
             "primary": bool(match.group("primary")),
             "x": int(match.group("x")),
             "y": int(match.group("y")),
             "w": int(match.group("w")),
             "h": int(match.group("h")),
-        })
-    return monitors
+        }
+        for match in _XRANDR_LINE.finditer(output)
+    ]
 
 
 def pick_monitor(monitors, point):
@@ -43,6 +52,7 @@ def pick_monitor(monitors, point):
 
 
 def _linux_monitors():
+    # Ask xrandr for the monitor layout (empty list if it isn't available)
     try:
         result = subprocess.run(
             ["xrandr", "--query"],
@@ -52,6 +62,10 @@ def _linux_monitors():
         return []
     return parse_xrandr(result.stdout)
 
+
+# --------------------------------------------------
+# Windows
+# --------------------------------------------------
 
 def _windows_work_area(point):
     """Work area (monitor minus taskbar) of the monitor containing the point."""
@@ -84,6 +98,10 @@ def _windows_work_area(point):
     return work.left, work.top, work.right - work.left, work.bottom - work.top
 
 
+# --------------------------------------------------
+# Public helpers
+# --------------------------------------------------
+
 def get_monitor_bounds(root, around=None):
     """Return (x, y, width, height) of the monitor to centre on, or None if it
     can't be determined (the caller should then let the window manager decide).
@@ -111,6 +129,7 @@ def get_monitor_bounds(root, around=None):
         if area:
             return area
 
+    # Anything else (or a failed lookup): the whole primary screen
     return 0, 0, root.winfo_screenwidth(), root.winfo_screenheight()
 
 
@@ -120,10 +139,12 @@ def centre_geometry(bounds, width, height, scale=1.0, lift=20, margin=(40, 100))
     `width`/`height` are in CustomTkinter units; `scale` converts them to pixels.
     """
     mx, my, mw, mh = bounds
+
+    # Never larger than the monitor (minus a margin for borders and taskbars)
     width = int(min(width, (mw - margin[0]) / scale))
     height = int(min(height, (mh - margin[1]) / scale))
-    pixel_w = width * scale
-    pixel_h = height * scale
-    x = mx + max(0, int((mw - pixel_w) // 2))
-    y = my + max(0, int((mh - pixel_h) // 2) - lift)
+
+    # Centre it, nudged up slightly so it looks balanced
+    x = mx + max(0, int((mw - width * scale) // 2))
+    y = my + max(0, int((mh - height * scale) // 2) - lift)
     return width, height, x, y

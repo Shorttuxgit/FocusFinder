@@ -1,4 +1,5 @@
 """
+Everything the Options panel and config.json know about lives in this file.
 
 HOW TO ADD A SETTING
 --------------------
@@ -25,6 +26,12 @@ FEATURE SWITCHES
 Setting(..., hidden=True) values live in config.json but never appear in
 Options. Use them to turn a whole feature on or off, and put the same key in
 `requires=` on an Action to hide the action when the feature is off.
+
+EDITING config.json BY HAND
+---------------------------
+The file is read once at start-up, so restart the app after editing it.
+Only the keys you want to change need to be in the file; anything missing
+uses the default listed below. Use true / false (lower case, no quotes).
 """
 
 from dataclasses import dataclass
@@ -51,13 +58,29 @@ class Action:
     requires: str = ""            # only show when this config key is truthy
 
 
+# --------------------------------------------------
+# Settings (the order here is the order shown in Options)
+# --------------------------------------------------
+
 SETTINGS = (
+    # Display section of the Options panel
     Setting("time_format", "12-hour time", False, section="Display", requires="sett_enabled"),
 
-    # Feature switches (edit config.json to change these)
+    # Show the splash screen on a normal start-up. When off, the app opens
+    # straight to the timetable if this week's timetable is already saved.
+    # The splash still appears whenever a new timetable has to be downloaded.
+    # (Takes effect the next time the app starts.)
+    Setting("splash_screen", "Splash screen on start-up", True, section="Display", requires="sett_enabled"),
+
+    # Feature switches (edit config.json to change these, then restart)
     Setting("friends_system", "Friends system", True, hidden=True),
+    Setting("progress_system", "Grades / progress panel", True, hidden=True),
     Setting("sett_enabled", "Settings panel", True, hidden=True),
 )
+
+# --------------------------------------------------
+# Buttons shown in the Options panel
+# --------------------------------------------------
 
 ACTIONS = (
     Action("export", "Export my timetable", "Friends", "export_my_timetable_file", requires="friends_system"),
@@ -67,4 +90,5 @@ ACTIONS = (
 # Order sections appear in Options; any other section is added after these
 SECTION_ORDER = ("Display", "Friends")
 
+# key -> default value, used when config.json is missing or incomplete
 DEFAULTS = {setting.key: setting.default for setting in SETTINGS}

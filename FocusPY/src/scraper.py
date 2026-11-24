@@ -1,61 +1,110 @@
-import os
+# --------------------------------------------------
+# Talks to the Focus website and keeps a weekly cache
+# --------------------------------------------------
+
 import json
-from datetime import datetime, date, timedelta
+import os
+from datetime import date, timedelta
+
 from FocusPY.src.constants import BASE_URL, SESSION_FILE, CACHE_FILE
 
+# How many weeks of timetable to download, and how many times to retry a login
+TOTAL_WEEKS = 5
+LOGIN_ATTEMPTS = 4
+
+# The browser never needs these, so they are not downloaded (faster loading)
+BLOCKED_RESOURCES = {"image", "font", "media"}
+
+
+# --------------------------------------------------
+# Weekly cache
+# --------------------------------------------------
+
 def get_current_week_sunday():
+    # The cache is only valid for the week (Sunday to Saturday) it was saved in
     today = date.today()
-    days_since_sunday = (today.weekday() + 1) % 7
-    sunday = today - timedelta(days=days_since_sunday)
+    sunday = today - timedelta(days=(today.weekday() + 1) % 7)
     return sunday.strftime("%Y-%m-%d")
 
-def load_cached_timetable():
-    if not os.path.exists(CACHE_FILE):
-        return None
-    try:
-        with open(CACHE_FILE, "r") as f:
-            data = json.load(f)
-            if data.get("week_commencing") == get_current_week_sunday():
-                # Caches written before grades were added have no "progress" key,
-                # so treat them as stale and fetch again.
-                if "progress" not in data:
-                    return None
-                return (
-                    data.get("events", []),
-                    data.get("student_name", "Student"),
-                    data.get("progress", []),
-                )
-    except Exception:
-        pass
-    return None
 
-def save_cached_timetable(events, student_name, progress=None):
+def load_cached_timetable(need_progress=False):
+    """Return (events, student_name, progress) saved this week, or None.
+
+    need_progress=True means the grades panel is switched on, so a cache that
+    was saved without grades is treated as out of date and fetched again.
+    """
     try:
-        data = {
-            "week_commencing": get_current_week_sunday(),
-            "student_name": student_name,
-            "events": events,
-            "progress": progress or []
-        }
-        with open(CACHE_FILE, "w") as f:
-            json.dump(data, f, indent=2)
-    except Exception as e:
-        print(f"[!] Warning: Could not save timetable cache: {e}")
+        with open(CACHE_FILE, "r", encoding="utf-8") as file:
+            data = json.load(file)
+    except Exception:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    # Wrong week
+    if data.get("week_commencing") != get_current_week_sunday():
+        return None
+
+    # Caches written before grades were added have no "progress" key
+    if "progress" not in data:
+        return None
+
+    # Grades are wanted but this cache was saved with the grades panel off
+    if need_progress and not data.get("has_progress", True):
+        return None
+
+    return (
+        data.get("events", []),
+        data.get("student_name", "Student"),
+        data.get("progress", []),
+    )
+
+
+def save_cached_timetable(events, student_name, progress=None, has_progress=True):
+    # has_progress records whether grades were downloaded (they are skipped
+    # when the progress system is switched off)
+    data = {
+        "week_commencing": get_current_week_sunday(),
+        "student_name": student_name,
+        "events": events,
+        "progress": progress or [],
+        "has_progress": has_progress,
+    }
+
+    try:
+        with open(CACHE_FILE, "w", encoding="utf-8") as file:
+            json.dump(data, file, indent=2)
+    except Exception as error:
+        print(f"[!] Warning: Could not save timetable cache: {error}")
+
+
+# --------------------------------------------------
+# Reading the timetable out of the page's background (Livewire) responses
+# --------------------------------------------------
 
 def extract_events(livewire_responses):
     events = []
-    for resp in livewire_responses:
-        components = resp if isinstance(resp, list) else resp.get("components", [])
-        for comp in components:
-            if not isinstance(comp, dict):
+
+    for response in livewire_responses:
+        components = response if isinstance(response, list) else response.get("components", [])
+
+        for component in components:
+            if not isinstance(component, dict):
                 continue
-            dispatches = comp.get("effects", {}).get("dispatches", [])
-            for dispatch in dispatches:
+
+            for dispatch in component.get("effects", {}).get("dispatches", []):
                 if dispatch.get("name") == "event-changed":
-                    evt_list = dispatch.get("params", {}).get("events", [])
-                    events.extend(evt_list)
+                    events.extend(dispatch.get("params", {}).get("events", []))
+
     return events
 
+
+# --------------------------------------------------
+# Grades / progress page
+# --------------------------------------------------
+
+# Runs inside the browser: reads every course table on the progress page
 PROGRESS_JS = """
 () => Array.from(document.querySelectorAll('div.mb-8')).map(section => {
     const title = section.querySelector('h1');
@@ -102,10 +151,11 @@ def fetch_progress(page, base_url, logger_fn):
 
     courses = []
     for course in raw_courses:
-        # Use the most recent column that actually has a grade recorded.
+        # Use the most recent column that actually has a grade recorded
         filled = [c for c in course["columns"] if c["grade"] or c["ttg"]]
         if not filled:
             continue
+
         latest = filled[-1]
         courses.append({
             "title": course["title"],
@@ -120,7 +170,12 @@ def fetch_progress(page, base_url, logger_fn):
     return courses
 
 
+# --------------------------------------------------
+# Signing in
+# --------------------------------------------------
+
 def perform_login(p, logger_fn):
+    # Opens a visible browser so the student can sign in, then saves the session
     logger_fn("\n" + "=" * 50, "Sign in using the browser window")
     logger_fn("ACTION REQUIRED: Complete login in the browser window.")
     logger_fn("=" * 50 + "\n")
@@ -132,123 +187,179 @@ def perform_login(p, logger_fn):
 
     try:
         page.wait_for_url(
-            lambda url: "focus.barton.ac.uk" in url.lower() and "login" not in url.lower() and "google.com" not in url.lower(),
+            lambda url: "focus.barton.ac.uk" in url.lower()
+            and "login" not in url.lower()
+            and "google.com" not in url.lower(),
             timeout=120000
         )
         page.wait_for_timeout(1500)
     except Exception:
         logger_fn("[!] Waiting for user to complete login in browser...")
 
-    context.storage_state(path=SESSION_FILE)
+    context.storage_state(path=str(SESSION_FILE))
     logger_fn("[+] Login detected! Session saved.")
     browser.close()
 
-TOTAL_WEEKS = 5
+
+def remove_session():
+    if os.path.exists(SESSION_FILE):
+        os.remove(SESSION_FILE)
 
 
-def fetch_timetable_data(sync_playwright_fn, logger_fn, progress_fn=None):
+def on_login_page(page):
+    url = page.url.lower()
+    return "login" in url or "google.com" in url
+
+
+def block_heavy_resources(route):
+    # Skip images, fonts and media: the timetable data does not need them
+    if route.request.resource_type in BLOCKED_RESOURCES:
+        route.abort()
+    else:
+        route.continue_()
+
+
+def open_portal(p, on_response):
+    # Start a hidden browser with the saved session and open the portal home page
+    browser = p.chromium.launch(headless=True)
+    context = browser.new_context(storage_state=str(SESSION_FILE))
+    context.route("**/*", block_heavy_resources)
+
+    page = context.new_page()
+    page.on("response", on_response)
+    page.goto(BASE_URL)
+    return browser, page
+
+
+def sign_in(p, on_response, logger_fn):
+    """Open the portal, signing in again if the saved session has expired.
+
+    Returns (browser, page), or (None, None) if every login attempt failed.
+    """
+    if not os.path.exists(SESSION_FILE):
+        perform_login(p, logger_fn)
+
+    browser, page = open_portal(p, on_response)
+    if not on_login_page(page):
+        return browser, page
+
+    logger_fn("[!] Session expired. Re-authenticating...")
+
+    for _ in range(LOGIN_ATTEMPTS):
+        browser.close()
+        remove_session()
+        perform_login(p, logger_fn)
+
+        browser, page = open_portal(p, on_response)
+        if not on_login_page(page):
+            return browser, page
+
+    browser.close()
+    remove_session()
+    return None, None
+
+
+def read_student_name(page):
+    # The dashboard heading looks like "Welcome Back, <name>"
+    try:
+        heading = page.locator("h1.text-3xl.font-bold").inner_text(timeout=5000)
+    except Exception:
+        return "Student"
+
+    return heading.replace("Welcome Back,", "").strip() or "Student"
+
+
+# --------------------------------------------------
+# Downloading the timetable
+# --------------------------------------------------
+
+def wait_for_week(page, responses, timeout_ms=2500):
+    # After clicking "next week", wait until event data actually arrives
+    # instead of always pausing for a fixed time
+    waited = 0
+    while waited < timeout_ms and not extract_events(responses):
+        page.wait_for_timeout(100)
+        waited += 100
+
+    try:
+        page.wait_for_load_state("networkidle", timeout=5000)
+    except Exception:
+        pass
+
+
+def fetch_timetable_data(sync_playwright_fn, logger_fn, progress_fn=None, fetch_grades=True):
+    """Download the timetable (and optionally grades).
+
+    Returns (events, student_name, progress) or None if signing in failed.
+    """
+
     def step(fraction, status):
         # Log a human-readable step and move the loading bar forward
         logger_fn(f"[*] {status}", status)
         if progress_fn:
             progress_fn(fraction)
 
-    step(0.10, "Connecting to Focus portal...")
+    # Every background response from the page is collected here
+    responses = []
 
-    with sync_playwright_fn() as p:
-        if not os.path.exists(SESSION_FILE):
-            perform_login(p, logger_fn)
-
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(storage_state=SESSION_FILE)
-        page = context.new_page()
-
-        livewire_responses = []
-        def handle_response(response):
-            if "livewire" in response.url or "message" in response.url:
-                try:
-                    data = response.json()
-                    if data:
-                        livewire_responses.append(data)
-                except Exception:
-                    pass
-
-        page.on("response", handle_response)
-        page.goto(BASE_URL)
-    
-        if "login" in page.url.lower() or "google.com" in page.url.lower():
-            logger_fn("[!] Session expired. Re-authenticating...")
-            browser.close()
-            if os.path.exists(SESSION_FILE):
-                os.remove(SESSION_FILE)
-            
-            login_success = False
-            for attempt in range(4):
-                perform_login(p, logger_fn)
-                browser = p.chromium.launch(headless=True)
-                context = browser.new_context(storage_state=SESSION_FILE)
-                page = context.new_page()
-                page.on("response", handle_response)
-                page.goto(BASE_URL)
-                
-                if not ("login" in page.url.lower() or "google.com" in page.url.lower()):
-                    login_success = True
-                    break
-                else:
-                    browser.close()
-                    if os.path.exists(SESSION_FILE):
-                        os.remove(SESSION_FILE)
-
-            if not login_success:
-                return None
-
-        step(0.25, "Signed in. Reading your profile...")
-        student_name = "Student"
-        try:
-            h1_text = page.locator("h1.text-3xl.font-bold").inner_text(timeout=5000)
-            if "Welcome Back," in h1_text:
-                student_name = h1_text.replace("Welcome Back,", "").strip()
-            else:
-                student_name = h1_text.strip()
-        except Exception:
-            pass
-
-        url = page.url
-        i = url.rfind('/')
-        if i < 0:
-            browser.close()
-            return None
-        student_base = url[:i]
-        url = student_base + "/timetable"
-
-        step(0.30, "Opening your timetable...")
-        page.goto(url)
-        step(0.35, f"Loading week 1 of {TOTAL_WEEKS}...")
-        try:
-            page.wait_for_selector("#powerCalendar", timeout=15000)
-            page.wait_for_load_state("networkidle", timeout=10000)
-        except Exception:
-            pass
-
-        current_week_events = extract_events(livewire_responses)
-        livewire_responses.clear()
-
-        all_fetched = list(current_week_events)
-        for week_idx in range(TOTAL_WEEKS - 1):
-            step(0.35 + 0.45 * (week_idx + 1) / TOTAL_WEEKS, f"Loading week {week_idx + 2} of {TOTAL_WEEKS}...")
+    def on_response(response):
+        if "livewire" in response.url or "message" in response.url:
             try:
-                page.click(".fc-next-button")
-                page.wait_for_timeout(2000)
-                page.wait_for_load_state("networkidle", timeout=5000)
-                week_events = extract_events(livewire_responses)
-                all_fetched.extend(week_events)
-                livewire_responses.clear()
+                data = response.json()
+                if data:
+                    responses.append(data)
             except Exception:
                 pass
 
-        step(0.88, "Collecting your grades...")
-        progress = fetch_progress(page, student_base, logger_fn)
-        step(0.97, "Finishing up...")
+    step(0.10, "Connecting to Focus portal...")
 
-        browser.close()
-        return all_fetched, student_name, progress
+    with sync_playwright_fn() as p:
+        browser, page = sign_in(p, on_response, logger_fn)
+        if browser is None:
+            return None
+
+        try:
+            step(0.25, "Signed in. Reading your profile...")
+            student_name = read_student_name(page)
+
+            # The student's pages share a base address, e.g. https://.../student/123
+            cut = page.url.rfind("/")
+            if cut < 0:
+                return None
+            student_base = page.url[:cut]
+
+            step(0.30, "Opening your timetable...")
+            page.goto(student_base + "/timetable")
+
+            step(0.35, f"Loading week 1 of {TOTAL_WEEKS}...")
+            try:
+                page.wait_for_selector("#powerCalendar", timeout=15000)
+                page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception:
+                pass
+
+            events = extract_events(responses)
+            responses.clear()
+
+            # Click "next" to load the remaining weeks
+            for week in range(1, TOTAL_WEEKS):
+                step(0.35 + 0.45 * week / TOTAL_WEEKS, f"Loading week {week + 1} of {TOTAL_WEEKS}...")
+                try:
+                    page.click(".fc-next-button")
+                    wait_for_week(page, responses)
+                    events.extend(extract_events(responses))
+                    responses.clear()
+                except Exception:
+                    pass
+
+            # Grades are skipped completely when the progress system is off
+            progress = []
+            if fetch_grades:
+                step(0.88, "Collecting your grades...")
+                progress = fetch_progress(page, student_base, logger_fn)
+
+            step(0.97, "Finishing up...")
+            return events, student_name, progress
+
+        finally:
+            browser.close()

@@ -1,14 +1,23 @@
+# --------------------------------------------------
+# The main window: daily timetable, grades panel, options and dialogs
+# --------------------------------------------------
+
 import tkinter as tk
 import tkinter.font as tkfont
-from tkinter import ttk, filedialog
+from bisect import bisect_left
 from datetime import datetime, date, timedelta
+from tkinter import ttk, filedialog
 import customtkinter as ctk
 
 from FocusPY.src.constants import BG_DARK, BG_SURFACE, BG_CARD, BG_HOVER, FG_TEXT, FG_SUBTEXT, FG_ACCENT, FG_GREEN
-from FocusPY.src.config_manager import load_config, write_to_config
+from FocusPY.src.config_manager import load_config, write_to_config, get_config_error
 from FocusPY.src.friend_manager import export_friend_file, import_friend_file, load_friends, delete_friend
 from FocusPY.src.course_names import unique_short_names
 from FocusPY.src.settings import SETTINGS, ACTIONS, SECTION_ORDER
+
+# --------------------------------------------------
+# Look and feel
+# --------------------------------------------------
 
 # Grade ladders used by Focus. The right scale is chosen by checking which one
 # contains the course's target grade.
@@ -17,6 +26,7 @@ GRADE_SCALES = [
     ["U", "PP", "MP", "MM", "DM", "DD", "D*D", "D*D*"],
 ]
 COMMIT_SCALE = ["3", "2", "1", "★"]
+
 ZEBRA_ROW = "#1d1d2c"
 OVERLAY_BG = "#11111b"
 DANGER = "#f38ba8"
@@ -25,8 +35,31 @@ ACCENT_HOVER = "#74a0f0"
 BUTTON_HOVER = "#585b70"
 CELL_PADDING = 26
 
+# Button colours: (background, hover, text)
+BUTTON_STYLES = {
+    "primary": (FG_ACCENT, ACCENT_HOVER, BG_DARK),
+    "danger": (DANGER, DANGER_HOVER, BG_DARK),
+    "secondary": (BG_HOVER, BUTTON_HOVER, FG_TEXT),
+}
+
+
+def make_button(parent, text, command, kind="secondary", **options):
+    """A standard rounded button. Extra keyword arguments (width, height...) override the defaults."""
+    background, hover, text_color = BUTTON_STYLES[kind]
+    settings = dict(
+        font=("Arial", 12, "bold"), fg_color=background, hover_color=hover,
+        text_color=text_color, corner_radius=12, height=36,
+    )
+    settings.update(options)
+    return ctk.CTkButton(parent, text=text, command=command, **settings)
+
+
+# --------------------------------------------------
+# Grade ladder helpers
+# --------------------------------------------------
 
 def pick_grade_scale(target, current):
+    # Use the first ladder that contains the target grade (or else the current grade)
     for grade in (target, current):
         for scale in GRADE_SCALES:
             if grade and grade in scale:
@@ -56,22 +89,25 @@ def plan_markers(now_idxs, target_idx):
     """
     now_idxs = sorted(now_idxs)
 
+    # Only a target, or only a current grade
     if not now_idxs:
         return [("Target", "target", target_idx, 1)] if target_idx is not None else []
 
+    now_span = (now_idxs[0], now_idxs[-1] - now_idxs[0] + 1)
+
     if target_idx is None:
-        return [("Now", "now", now_idxs[0], now_idxs[-1] - now_idxs[0] + 1)]
+        return [("Now", "now", *now_span)]
 
+    # Target is outside the highlighted range: two separate labels
     if target_idx not in now_idxs:
-        return [
-            ("Now", "now", now_idxs[0], now_idxs[-1] - now_idxs[0] + 1),
-            ("Target", "target", target_idx, 1),
-        ]
+        return [("Now", "now", *now_span), ("Target", "target", target_idx, 1)]
 
+    # Target is the only highlighted grade: one combined label
     rest = [i for i in now_idxs if i != target_idx]
     if not rest:
         return [("Now • Target", "target", target_idx, 1)]
 
+    # Target is inside the range: put "Now" over the widest unbroken run beside it
     runs = []
     for index in rest:
         if runs and index == runs[-1][-1] + 1:
@@ -80,22 +116,25 @@ def plan_markers(now_idxs, target_idx):
             runs.append([index])
     widest = max(runs, key=len)
 
-    return [
-        ("Now", "now", widest[0], len(widest)),
-        ("Target", "target", target_idx, 1),
-    ]
+    return [("Now", "now", widest[0], len(widest)), ("Target", "target", target_idx, 1)]
 
 
 def normalise_commit(value):
+    # Focus writes the top commitment level as "1*" or "*"; show it as a star
     value = (value or "").strip()
     return "★" if value in ("1*", "*", "★") else value
 
+
+# --------------------------------------------------
+# Table helpers
+# --------------------------------------------------
 
 def fit_text(font, text, max_pixels):
     """Shorten text with an ellipsis so it fits in max_pixels."""
     if max_pixels <= 0 or font.measure(text) <= max_pixels:
         return text
 
+    # Binary search for the longest piece of text that still fits
     low, high = 0, len(text)
     while low < high:
         middle = (low + high + 1) // 2
@@ -107,10 +146,40 @@ def fit_text(font, text, max_pixels):
     return text[:low].rstrip() + "…" if low else "…"
 
 
+def parse_event_time(raw):
+    # "2026-11-24T09:00:00.000Z" -> datetime (raises ValueError if it is not a date)
+    return datetime.strptime(raw.split(".")[0].replace("T", " "), "%Y-%m-%d %H:%M:%S")
+
+
+def event_field(event, key):
+    # Room / staff can sit at the top level or inside "extendedProps"
+    value = event.get(key) or (event.get("extendedProps") or {}).get(key)
+    return str(value or "").strip() or "—"
+
+
+def week_start(day_key):
+    # Monday of the week a "YYYY-MM-DD" key belongs to (None for non-dates like "9999-99-99")
+    try:
+        day = date.fromisoformat(day_key)
+    except ValueError:
+        return None
+    return day - timedelta(days=day.weekday())
+
+
+def first_day_index(dates, today):
+    """Which day to open on: today, else the day before the next lesson day."""
+    position = bisect_left(dates, today)
+
+    if position >= len(dates):
+        return 0
+    if dates[position] == today:
+        return position
+    return max(0, position - 1)
+
+
 class TimetableWidget:
     def __init__(self, root, events, student_name, progress=None, show=True):
         self.root = root
-        self.my_progress = progress or []
 
         # In-app overlay panels (options, dialogs) and toast state
         self._overlays = []
@@ -118,6 +187,7 @@ class TimetableWidget:
         self._option_vars = []
         self.toast = None
 
+        # The logged-in student's own data
         self.my_events = events
         self.my_name = student_name
 
@@ -128,10 +198,14 @@ class TimetableWidget:
 
         # Settings (see settings.py). Read values anywhere with self.cfg["key"].
         self.cfg = load_config()
-        self.sett_enabled = self.cfg.get("sett_enabled", True)
-        self.friends_system_enabled = self.cfg.get("friends_system", True)
-        self.time_format = bool(self.cfg.get("time_format", False))
+        self.sett_enabled = self.cfg["sett_enabled"]
+        self.friends_system_enabled = self.cfg["friends_system"]
+        self.progress_enabled = self.cfg["progress_system"]
+        self.time_format = bool(self.cfg["time_format"])
         self.update_time_format_variables()
+
+        # Grades are ignored completely when the progress system is off
+        self.my_progress = (progress or []) if self.progress_enabled else []
 
         # Caches that keep screen changes cheap
         self._friends = None
@@ -144,27 +218,14 @@ class TimetableWidget:
         self._current_rows = []
         self._row_full = {}
 
-        # Determine greeting based on current time of day
-        current_Date = datetime.now()
-        current_time = current_Date.strftime("%p")
-        self.greeting = "Good Morning," if current_time == "AM" else "Good Afternoon,"
+        # Greeting depends on the time of day
+        self.greeting = "Good Morning," if datetime.now().hour < 12 else "Good Afternoon,"
 
-        # Group timetable events by date
-        self.grouped_days = self.get_grouped_days(self.view_key, events)
-        self.available_dates = sorted(list(self.grouped_days.keys()))
+        # Group timetable events by date and start on today (or the nearest day)
+        self.load_days()
+        self.current_index = first_day_index(self.available_dates, date.today().isoformat())
 
-        # Set calendar index to today's date
-        self.current_index = 0
-        today_str = date.today().strftime("%Y-%m-%d")
-
-        for idx, d_str in enumerate(self.available_dates):
-            if d_str == today_str:
-                self.current_index = idx
-                break
-            elif d_str > today_str:
-                self.current_index = max(0, idx - 1)
-                break
-
+        # Fonts used to measure text for the table
         self.body_font = tkfont.Font(root=self.root, family="Arial", size=13)
         self.head_font = tkfont.Font(root=self.root, family="Arial", size=10, weight="bold")
 
@@ -192,6 +253,7 @@ class TimetableWidget:
     # ------------------------------------------------------------------
 
     def get_friends(self, force=False):
+        # Friends are read from disk once and then kept in memory
         if force or self._friends is None:
             self._friends = load_friends()
         return self._friends
@@ -203,14 +265,18 @@ class TimetableWidget:
             self._group_cache[key] = self.process_events(events)
         return self._group_cache[key]
 
+    def load_days(self):
+        # Group the active view's events by date
+        self.grouped_days = self.get_grouped_days(self.view_key, self.events)
+        self.available_dates = sorted(self.grouped_days)
+
     def reload_days(self):
         # Rebuild the day list for the active view, staying on the same day if possible
         current_key = None
-        if self.available_dates and self.current_index < len(self.available_dates):
+        if self.current_index < len(self.available_dates):
             current_key = self.available_dates[self.current_index]
 
-        self.grouped_days = self.get_grouped_days(self.view_key, self.events)
-        self.available_dates = sorted(self.grouped_days.keys())
+        self.load_days()
 
         if current_key in self.available_dates:
             self.current_index = self.available_dates.index(current_key)
@@ -270,27 +336,23 @@ class TimetableWidget:
         )
         self.welcome_label.pack(anchor="center", pady=6)
 
-        # Day navigation card
+        # Day navigation card: previous button, clickable date, next button
         nav_card = ctk.CTkFrame(self.main_container, fg_color=BG_CARD, corner_radius=16)
         nav_card.pack(fill=tk.X, pady=(0, 10), ipadx=12, ipady=6)
 
-        self.prev_btn = ctk.CTkButton(nav_card, text="<< Previous Day", command=self.prev_day, font=("Arial", 12, "bold"), fg_color=BG_HOVER, hover_color=BUTTON_HOVER, text_color=FG_TEXT, corner_radius=12, height=36, width=140)
+        self.prev_btn = make_button(nav_card, "<< Previous Day", self.prev_day, width=140)
         self.prev_btn.pack(side=tk.LEFT, padx=(10, 0))
 
         self.date_label = ctk.CTkLabel(
-            nav_card,
-            text="",
-            font=("Arial", 14, "bold"),
-            text_color=FG_TEXT,
-            cursor="hand2"
+            nav_card, text="", font=("Arial", 14, "bold"), text_color=FG_TEXT, cursor="hand2"
         )
         self.date_label.pack(side=tk.LEFT, expand=True)
         self.date_label.bind("<Button-1>", self.go_to_today)
 
-        self.next_btn = ctk.CTkButton(nav_card, text="Next Day >>", command=self.next_day, font=("Arial", 12, "bold"), fg_color=BG_HOVER, hover_color=BUTTON_HOVER, text_color=FG_TEXT, corner_radius=12, height=36, width=140)
+        self.next_btn = make_button(nav_card, "Next Day >>", self.next_day, width=140)
         self.next_btn.pack(side=tk.RIGHT, padx=(0, 10))
 
-        # Bottom toolbar frame holding view switcher dropdown and options button side-by-side
+        # Bottom toolbar: view switcher dropdown and options button side by side
         bottom_frame = ctk.CTkFrame(self.main_container, fg_color="transparent")
         bottom_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(0, 5))
         self.bottom_frame = bottom_frame
@@ -298,9 +360,9 @@ class TimetableWidget:
         bottom_inner = ctk.CTkFrame(bottom_frame, fg_color="transparent")
         bottom_inner.pack(expand=True, anchor="center")
 
+        # The view dropdown only exists when the friends system is on
         if self.friends_system_enabled:
-            friend_data = self.get_friends()
-            view_options = ["My Timetable"] + [f"Friend: {name}" for name in friend_data.keys()]
+            view_options = ["My Timetable"] + [f"Friend: {name}" for name in self.get_friends()]
 
             self.view_var = tk.StringVar(value=view_options[0])
             self.view_dropdown = ctk.CTkOptionMenu(
@@ -309,13 +371,9 @@ class TimetableWidget:
             )
             self.view_dropdown.pack(side=tk.LEFT, padx=6)
 
-        if self.sett_enabled or self.friends_system_enabled:
-            options_btn = ctk.CTkButton(
-                bottom_inner, text="Options", font=("Arial", 12, "bold"),
-                fg_color=BG_HOVER, hover_color=BUTTON_HOVER, text_color=FG_TEXT,
-                command=self.open_options_menu, corner_radius=12, height=36, width=110
-            )
-            options_btn.pack(side=tk.LEFT, padx=6)
+        # The Options button only exists when there is something to show in it
+        if self.has_options():
+            make_button(bottom_inner, "Options", self.open_options_menu, width=110).pack(side=tk.LEFT, padx=6)
 
         # Timetable events table card
         table_card = ctk.CTkFrame(self.main_container, fg_color=BG_SURFACE, corner_radius=16, border_width=0)
@@ -343,7 +401,7 @@ class TimetableWidget:
         self.tree.bind("<Configure>", self.on_tree_configure)
         self.tree.bind("<Double-1>", self.on_row_double_click)
 
-        # Grades panel sits beneath the timetable
+        # Grades panel sits beneath the timetable (skipped when the progress system is off)
         self.progress_card = None
         self.build_progress_card()
 
@@ -358,6 +416,7 @@ class TimetableWidget:
         are unknown until the window is on screen. Calling this before the
         window becomes visible means nothing shifts after the user sees it.
         """
+        # Cancel any resize work that was queued while the window was being built
         for name in ("_refit_job", "_bar_job"):
             job = getattr(self, name, None)
             if job is not None:
@@ -370,6 +429,11 @@ class TimetableWidget:
 
         if self.progress_card is not None:
             self.layout_course_buttons()
+
+        # If config.json could not be read, say so instead of silently using defaults
+        problem = get_config_error()
+        if problem:
+            self.root.after(500, lambda: self.show_toast(f"Config problem: {problem}", is_error=True))
 
     # ------------------------------------------------------------------
     # Timetable table
@@ -400,20 +464,22 @@ class TimetableWidget:
         title_min = 150
         title_w = available - time_w - room_w - staff_w
 
+        # Not enough room for the title: take the difference from the Staff column
         if title_w < title_min:
             staff_floor = self.head_font.measure("Staff") + CELL_PADDING + 8
             give = min(title_min - title_w, max(0, staff_w - staff_floor))
             staff_w -= give
             title_w += give
 
-        title_w = max(title_w, 60)
-        return time_w, title_w, room_w, staff_w
+        return time_w, max(title_w, 60), room_w, staff_w
 
     def render_rows(self):
+        # Fill the table with the current day's lessons
         rows = self._current_rows
         widths = self.fit_columns(rows)
         time_w, title_w, room_w, staff_w = widths
 
+        # Only touch the column settings when a width really changed
         if widths != self._col_widths:
             self._col_widths = widths
             self.tree.column("Time", width=time_w, minwidth=time_w, stretch=False)
@@ -435,6 +501,7 @@ class TimetableWidget:
                 ),
                 tags=("odd" if idx % 2 else "even",)
             )
+            # Remember the full (unshortened) text for the double-click details
             self._row_full[item] = (time_text, title, room, staff)
 
     def on_tree_configure(self, event):
@@ -455,7 +522,7 @@ class TimetableWidget:
     def on_row_double_click(self, event):
         # Full details for a lesson, in case any text was shortened to fit
         item = self.tree.identify_row(event.y)
-        if not item or item not in self._row_full:
+        if item not in self._row_full:
             return
 
         time_text, title, room, staff = self._row_full[item]
@@ -470,14 +537,10 @@ class TimetableWidget:
             self.update_nav_buttons(False, False)
             return
 
-        current_key = self.available_dates[self.current_index]
-        day_data = self.grouped_days[current_key]
+        day = self.grouped_days[self.available_dates[self.current_index]]
 
-        self.set_date_text(day_data["header"])
-
-        self._current_rows = [
-            (e["time"], e["title"], e["room"], e["staff"]) for e in day_data["events"]
-        ]
+        self.set_date_text(day["header"])
+        self._current_rows = [(e["time"], e["title"], e["room"], e["staff"]) for e in day["events"]]
         self.render_rows()
 
         self.update_nav_buttons(
@@ -486,6 +549,7 @@ class TimetableWidget:
         )
 
     def set_date_text(self, text):
+        # Only redraw the label when the text changed
         if text != self._date_text:
             self._date_text = text
             self.date_label.configure(text=text)
@@ -507,7 +571,7 @@ class TimetableWidget:
                 )
 
     # ------------------------------------------------------------------
-    # Grades panel
+    # Grades panel (only built when "progress_system" is on)
     # ------------------------------------------------------------------
 
     def build_progress_card(self):
@@ -519,6 +583,7 @@ class TimetableWidget:
         self._button_pos = {}
         self._bar_job = None
 
+        # Nothing to show: progress system off, or no grades were found
         if not self.my_progress:
             return
 
@@ -526,6 +591,7 @@ class TimetableWidget:
         card.pack(side=tk.BOTTOM, fill=tk.X, pady=(0, 10), before=self.table_card)
         self.progress_card = card
 
+        # Top row: title plus one button per course
         self.course_bar = ctk.CTkFrame(card, fg_color="transparent")
         self.course_bar.pack(fill=tk.X, padx=14, pady=(8, 0))
 
@@ -536,15 +602,15 @@ class TimetableWidget:
 
         names = unique_short_names([course.get("title") for course in self.my_progress])
         for index, name in enumerate(names):
-            button = ctk.CTkButton(
+            self.course_buttons.append(ctk.CTkButton(
                 self.course_bar, text=name,
                 font=("Arial", 11, "bold"), height=24, corner_radius=12,
                 width=10, border_spacing=6,
                 fg_color=BG_HOVER, hover_color=BUTTON_HOVER, text_color=FG_TEXT,
                 command=lambda i=index: self.show_course(i)
-            )
-            self.course_buttons.append(button)
+            ))
 
+        # Area where the selected course's details are shown
         self.course_area = ctk.CTkFrame(card, fg_color="transparent")
         self.course_area.pack(fill=tk.X, padx=4, pady=(0, 6))
 
@@ -552,12 +618,22 @@ class TimetableWidget:
         self.layout_course_buttons()
         self.course_bar.bind("<Configure>", self.on_bar_configure)
 
+        # Only the first course is built now; the rest are built a little at a
+        # time once the window is open, so start-up stays quick
         self.show_course(0)
+        self.root.after(100, self.prebuild_course_blocks, 1)
 
-        # Build every course now (this runs while the splash screen is up) so
-        # switching courses later never has to draw anything
-        for index in range(len(self.my_progress)):
+    def prebuild_course_blocks(self, index):
+        # Build one course panel per tick so switching courses later is instant
+        if index >= len(self.my_progress):
+            return
+
+        try:
             self.get_course_block(index)
+        except tk.TclError:
+            return      # window was closed in the meantime
+
+        self.root.after(30, self.prebuild_course_blocks, index + 1)
 
     def layout_course_buttons(self):
         # Flow the course buttons onto extra rows when they don't fit on one line
@@ -572,9 +648,11 @@ class TimetableWidget:
         for index, button in enumerate(self.course_buttons):
             needed = button.winfo_reqwidth() + 8
 
+            # Start a new row when this button would go past the edge
             if in_row > 0 and used + needed > width:
                 row, column, used, in_row = row + 1, 0, 0, 0
 
+            # Only move a button if its position actually changed
             position = (row, column)
             if self._button_pos.get(index) != position:
                 button.grid(row=row, column=column, padx=3, pady=2, sticky="w")
@@ -585,6 +663,7 @@ class TimetableWidget:
             in_row += 1
 
     def on_bar_configure(self, event):
+        # Re-flow the buttons after a resize settles
         if event.width == self._bar_width:
             return
         if self._bar_job is not None:
@@ -596,6 +675,7 @@ class TimetableWidget:
         self.layout_course_buttons()
 
     def get_course_block(self, index):
+        # Build a course panel the first time it is needed, then reuse it
         block = self.course_blocks.get(index)
         if block is None:
             block = self.build_course_block(self.course_area, self.my_progress[index])
@@ -636,6 +716,7 @@ class TimetableWidget:
         top = ctk.CTkFrame(block, fg_color="transparent")
         top.pack(fill=tk.X, padx=12, pady=(7, 4))
 
+        # Left: course title and "Current / Target" summary
         text_col = ctk.CTkFrame(top, fg_color="transparent")
         text_col.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
@@ -649,7 +730,7 @@ class TimetableWidget:
             text_col, text=summary, font=("Arial", 10), text_color=FG_SUBTEXT, anchor="w"
         ).pack(anchor="w")
 
-        # Commitment circles
+        # Right: commitment circles
         commit_col = ctk.CTkFrame(top, fg_color="transparent")
         commit_col.pack(side=tk.RIGHT, padx=(10, 0))
 
@@ -667,6 +748,7 @@ class TimetableWidget:
             commit_col, text="Commitment", font=("Arial", 9), text_color=FG_SUBTEXT
         ).pack(pady=(1, 0))
 
+        # No recognised grade scale: nothing more to draw
         if not scale:
             ctk.CTkFrame(block, fg_color="transparent", height=2).pack()
             return block
@@ -683,6 +765,7 @@ class TimetableWidget:
         for i, label in enumerate(scale):
             bar.grid_columnconfigure(i, weight=1, uniform="grade")
 
+            # Current grade is blue, grades below it are grey, grades above are dim
             if i in now_idxs:
                 fill, text_color = FG_ACCENT, BG_DARK
             elif now_start is not None and i < now_start:
@@ -730,48 +813,41 @@ class TimetableWidget:
     def process_events(self, events):
         # Parse and group events by calendar date, excluding Saturdays
         grouped = {}
-        for ev in events:
-            start_raw = str(ev.get("start", ""))
-            end_raw = str(ev.get("end", ""))
+        time_format = f"{self.formats}:%M{self.isPOM}"
+
+        for event in events:
+            start_raw = str(event.get("start", ""))
+            end_raw = str(event.get("end", ""))
 
             try:
-                clean_start = start_raw.split(".")[0].replace("T", " ")
-                clean_end = end_raw.split(".")[0].replace("T", " ")
-
-                dt_start = datetime.strptime(clean_start, "%Y-%m-%d %H:%M:%S")
-                dt_end = datetime.strptime(clean_end, "%Y-%m-%d %H:%M:%S")
-
+                dt_start = parse_event_time(start_raw)
+                dt_end = parse_event_time(end_raw)
+            except ValueError:
+                # Dates that cannot be read go into one "Unscheduled" group
+                dt_start = datetime.min
+                day_key = "9999-99-99"
+                day_header = "Unscheduled / Other"
+                time_str = f"{start_raw} - {end_raw}"
+            else:
                 if dt_start.weekday() == 5:
                     continue
 
                 day_key = dt_start.strftime("%Y-%m-%d")
                 day_header = dt_start.strftime("%A, %d %B %Y")
-                time_str = f"{dt_start.strftime(f'{self.formats}:%M{self.isPOM}')} - {dt_end.strftime(f'{self.formats}:%M{self.isPOM}')}"
-            except ValueError:
-                dt_start = datetime.min
-                day_key = "9999-99-99"
-                day_header = "Unscheduled / Other"
-                time_str = f"{start_raw} - {end_raw}"
+                time_str = f"{dt_start.strftime(time_format)} - {dt_end.strftime(time_format)}"
 
-            title = ev.get("title") or "N/A"
-            room = str(ev.get("room") or ev.get("extendedProps", {}).get("room") or "—").strip()
-            staff = str(ev.get("staff") or ev.get("extendedProps", {}).get("staff") or "—").strip()
-            room = room if room else "—"
-            staff = staff if staff else "—"
-
-            if day_key not in grouped:
-                grouped[day_key] = {"header": day_header, "events": []}
-
-            grouped[day_key]["events"].append({
+            day = grouped.setdefault(day_key, {"header": day_header, "events": []})
+            day["events"].append({
                 "dt_start": dt_start,
                 "time": time_str,
-                "title": title,
-                "room": room,
-                "staff": staff
+                "title": event.get("title") or "N/A",
+                "room": event_field(event, "room"),
+                "staff": event_field(event, "staff"),
             })
 
-        for day_key in grouped:
-            grouped[day_key]["events"].sort(key=lambda x: x["dt_start"])
+        # Lessons in time order within each day
+        for day in grouped.values():
+            day["events"].sort(key=lambda item: item["dt_start"])
 
         return grouped
 
@@ -792,29 +868,18 @@ class TimetableWidget:
         today = date.today()
         today_key = today.isoformat()
 
+        # No lessons at weekends
         if today.weekday() >= 5:
             return
 
         if today_key not in self.grouped_days:
-            if not self.available_dates:
+            # Today has no lessons: only jump if the timetable covers today's week
+            this_week = today - timedelta(days=today.weekday())
+            if not any(week_start(key) == this_week for key in self.available_dates):
                 return
 
-            today_week_start = today - timedelta(days=today.weekday())
-            timetable_contains_today_week = any(
-                date.fromisoformat(day_key)
-                - timedelta(days=date.fromisoformat(day_key).weekday())
-                == today_week_start
-                for day_key in self.available_dates
-            )
-
-            if not timetable_contains_today_week:
-                return
-
-            self.grouped_days[today_key] = {
-                "header": today.strftime("%A, %d %B %Y"),
-                "events": []
-            }
-            self.available_dates = sorted(self.grouped_days.keys())
+            self.grouped_days[today_key] = {"header": today.strftime("%A, %d %B %Y"), "events": []}
+            self.available_dates = sorted(self.grouped_days)
 
         self.current_index = self.available_dates.index(today_key)
         self.update_display()
@@ -833,8 +898,7 @@ class TimetableWidget:
                 self.events = friend_data[friend_name]
                 self.view_key = f"friend:{friend_name}"
 
-        self.grouped_days = self.get_grouped_days(self.view_key, self.events)
-        self.available_dates = sorted(list(self.grouped_days.keys()))
+        self.load_days()
         self.current_index = 0
 
         self.welcome_label.configure(text=f"{self.greeting} {self.student_name}")
@@ -846,6 +910,7 @@ class TimetableWidget:
     # ------------------------------------------------------------------
 
     def push_overlay(self, width, close_on_click=False, on_close=None):
+        # Dim the whole window and draw a card in the middle
         overlay = ctk.CTkFrame(self.root, fg_color=OVERLAY_BG, corner_radius=0)
         overlay.place(x=0, y=0, relwidth=1, relheight=1)
 
@@ -872,14 +937,17 @@ class TimetableWidget:
         if entry not in self._overlays:
             return
         self._overlays.remove(entry)
+
         try:
             entry["overlay"].destroy()
         except tk.TclError:
             pass
+
         if entry["on_close"]:
             entry["on_close"]()
 
     def on_escape(self):
+        # Escape closes the top-most overlay
         if self._overlays:
             self.close_overlay(self._overlays[-1])
 
@@ -897,7 +965,7 @@ class TimetableWidget:
             border_width=1, border_color=color
         )
         ctk.CTkLabel(
-            toast, text=message, font=("Arial", 12, "bold"), text_color=color
+            toast, text=message, font=("Arial", 12, "bold"), text_color=color, wraplength=460
         ).pack(padx=18, pady=10)
         toast.place(relx=0.5, rely=1.0, y=-24, anchor="s")
         toast.lift()
@@ -911,7 +979,8 @@ class TimetableWidget:
             if self.toast is toast:
                 self.toast = None
 
-        self.root.after(3200, dismiss)
+        # Errors stay a little longer than confirmations
+        self.root.after(6000 if is_error else 3200, dismiss)
 
     def show_dialog(self, title, message, buttons, is_error=False):
         # buttons: list of (text, kind, callback) where kind is primary, danger or secondary
@@ -929,25 +998,14 @@ class TimetableWidget:
         row = ctk.CTkFrame(card, fg_color="transparent")
         row.pack(pady=(0, 18))
 
-        styles = {
-            "primary": (FG_ACCENT, ACCENT_HOVER, BG_DARK),
-            "danger": (DANGER, DANGER_HOVER, BG_DARK),
-            "secondary": (BG_HOVER, BUTTON_HOVER, FG_TEXT),
-        }
-
         for text, kind, callback in buttons:
-            fg, hover, text_color = styles[kind]
-
+            # Every button closes the dialog first, then runs its own action
             def run(cb=callback):
                 self.close_overlay(entry)
                 if cb:
                     cb()
 
-            ctk.CTkButton(
-                row, text=text, command=run, fg_color=fg, hover_color=hover,
-                text_color=text_color, font=("Arial", 12, "bold"),
-                corner_radius=12, height=34, width=100
-            ).pack(side=tk.LEFT, padx=6)
+            make_button(row, text, run, kind, height=34, width=100).pack(side=tk.LEFT, padx=6)
 
     def show_message(self, title, message, is_error=False):
         self.show_dialog(title, message, [("OK", "primary", None)], is_error=is_error)
@@ -963,25 +1021,35 @@ class TimetableWidget:
     # ------------------------------------------------------------------
 
     def option_visible(self, requires):
+        # An item with requires="some_key" is only shown while that config value is on
         return not requires or bool(self.cfg.get(requires))
+
+    def has_options(self):
+        # True when the Options panel would have at least one setting or button
+        return (
+            any(not s.hidden and self.option_visible(s.requires) for s in SETTINGS)
+            or any(self.option_visible(a.requires) for a in ACTIONS)
+        )
 
     def collect_option_sections(self):
         # Group visible settings and actions by section, in display order
         sections = {}
 
+        def section(name):
+            return sections.setdefault(name, {"settings": [], "actions": []})
+
         for setting in SETTINGS:
-            if setting.hidden or not self.option_visible(setting.requires):
-                continue
-            sections.setdefault(setting.section, {"settings": [], "actions": []})["settings"].append(setting)
+            if not setting.hidden and self.option_visible(setting.requires):
+                section(setting.section)["settings"].append(setting)
 
         for action in ACTIONS:
-            if not self.option_visible(action.requires):
-                continue
-            sections.setdefault(action.section, {"settings": [], "actions": []})["actions"].append(action)
+            if self.option_visible(action.requires):
+                section(action.section)["actions"].append(action)
 
+        # Sections that draw their own content (options_extra_<name>)
         for name in SECTION_ORDER:
             if hasattr(self, self.extra_method_name(name)):
-                sections.setdefault(name, {"settings": [], "actions": []})
+                section(name)
 
         ordered = [name for name in SECTION_ORDER if name in sections]
         ordered += [name for name in sections if name not in SECTION_ORDER]
@@ -1006,11 +1074,9 @@ class TimetableWidget:
         ).pack(anchor="w", padx=24, pady=(18, 4))
 
         # Pack the Done button first so it can never be pushed out of view
-        ctk.CTkButton(
-            card, text="Done", command=self.close_options_menu,
-            fg_color=FG_ACCENT, hover_color=ACCENT_HOVER, text_color=BG_DARK,
-            font=("Arial", 12, "bold"), corner_radius=12, height=36
-        ).pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=(0, 18))
+        make_button(card, "Done", self.close_options_menu, "primary").pack(
+            side=tk.BOTTOM, fill=tk.X, padx=20, pady=(0, 18)
+        )
 
         for name, content in self.collect_option_sections():
             heading = ctk.CTkLabel(
@@ -1020,28 +1086,29 @@ class TimetableWidget:
 
             drew = bool(content["settings"] or content["actions"])
 
+            # Toggles / choices for this section
             for setting in content["settings"]:
                 self.add_setting_row(card, setting)
 
+            # Buttons for this section
             for action in content["actions"]:
                 handler = getattr(self, action.handler, None)
                 if handler is None:
                     print(f"[!] Options action '{action.id}' has no method '{action.handler}'")
                     continue
-                ctk.CTkButton(
-                    card, text=action.label, command=handler, font=("Arial", 12, "bold"),
-                    fg_color=BG_HOVER, hover_color=BUTTON_HOVER, text_color=FG_TEXT,
-                    corner_radius=12, height=36
-                ).pack(fill=tk.X, padx=20, pady=(0, 8))
+                make_button(card, action.label, handler).pack(fill=tk.X, padx=20, pady=(0, 8))
 
+            # Custom content for this section
             extra = getattr(self, self.extra_method_name(name), None)
             if extra is not None and extra(card):
                 drew = True
 
+            # Don't leave a heading with nothing under it
             if not drew:
                 heading.destroy()
 
     def add_setting_row(self, card, setting):
+        # One row: label on the left, switch or choice buttons on the right
         row = ctk.CTkFrame(card, fg_color=BG_SURFACE, corner_radius=12, height=44)
         row.pack(fill=tk.X, padx=20, pady=(0, 6))
         row.pack_propagate(False)
@@ -1086,6 +1153,7 @@ class TimetableWidget:
             handler(value)
 
     def apply_setting_time_format(self, value):
+        # Switch between 24-hour and 12-hour times straight away
         self.time_format = bool(value)
         self.update_time_format_variables()
         self.reload_days()
@@ -1103,7 +1171,7 @@ class TimetableWidget:
         remove_row = ctk.CTkFrame(parent, fg_color="transparent")
         remove_row.pack(fill=tk.X, padx=20, pady=(0, 4))
 
-        friend_names = list(friend_data.keys())
+        friend_names = list(friend_data)
         del_var = tk.StringVar(value=friend_names[0])
         self._option_vars.append(del_var)
         ctk.CTkOptionMenu(
@@ -1125,11 +1193,7 @@ class TimetableWidget:
                 do_remove, yes_text="Remove"
             )
 
-        ctk.CTkButton(
-            remove_row, text="Remove", command=remove_friend,
-            fg_color=DANGER, hover_color=DANGER_HOVER, text_color=BG_DARK,
-            font=("Arial", 12, "bold"), corner_radius=12, height=34, width=90
-        ).pack(side=tk.LEFT)
+        make_button(remove_row, "Remove", remove_friend, "danger", height=34, width=90).pack(side=tk.LEFT)
         return True
 
     def close_options_menu(self):
@@ -1144,8 +1208,8 @@ class TimetableWidget:
         # Export the current user's timetable as an Android-compatible file
         try:
             output_file = export_friend_file(self.my_name, self.my_events)
-        except Exception as e:
-            self.show_message("Export failed", f"Could not save your timetable:\n{e}", is_error=True)
+        except Exception as error:
+            self.show_message("Export failed", f"Could not save your timetable:\n{error}", is_error=True)
             return
         self.show_message("Timetable exported", f"Your timetable was saved to:\n{output_file}")
 
@@ -1165,8 +1229,8 @@ class TimetableWidget:
 
         try:
             name, _events = import_friend_file(file_path)
-        except Exception as e:
-            self.show_message("Import failed", f"Could not import this timetable file:\n{e}", is_error=True)
+        except Exception as error:
+            self.show_message("Import failed", f"Could not import this timetable file:\n{error}", is_error=True)
             return
 
         self.refresh_dropdown_options()
@@ -1179,9 +1243,11 @@ class TimetableWidget:
             return
 
         friend_data = self.get_friends(force=True)
+
+        # Forget any parsed friend timetables, since they may have changed
         self._group_cache = {key: value for key, value in self._group_cache.items() if key[0] == "me"}
 
-        view_options = ["My Timetable"] + [f"Friend: {name}" for name in friend_data.keys()]
+        view_options = ["My Timetable"] + [f"Friend: {name}" for name in friend_data]
         self.view_dropdown.configure(values=view_options)
 
         current = self.view_var.get()

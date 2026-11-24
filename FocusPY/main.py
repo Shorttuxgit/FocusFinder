@@ -1,17 +1,20 @@
+# --------------------------------------------------
+# FocusFinder entry point: run this file to start the app
+# --------------------------------------------------
+
 import sys
 import ctypes
+import subprocess
 from pathlib import Path
 
 # --------------------------------------------------
-# Windows taskbar identity
+# Windows taskbar identity and DPI mode
 # --------------------------------------------------
 
 if sys.platform == "win32":
+    # Groups the window under its own taskbar icon (must match the installer's shortcut)
     APP_USER_MODEL_ID = "uk.shortclaws.focusfinder"
-
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-        APP_USER_MODEL_ID
-    )
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
 
     # System-level DPI awareness: the window is scaled once for the main display
     # and never re-laid-out when dragged between monitors. Per-monitor awareness
@@ -26,14 +29,15 @@ if sys.platform == "win32":
 # Project setup
 # --------------------------------------------------
 
+# Let "from FocusPY.src..." imports work by adding the folder above FocusPY
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+# Install CustomTkinter automatically if it is missing
 try:
     import customtkinter as ctk
 except ImportError:
-    import pip
-    pip.main(['install', 'customtkinter'])
+    subprocess.run([sys.executable, "-m", "pip", "install", "customtkinter"], check=False)
     import customtkinter as ctk
 
 from FocusPY.src.ui_loading import FocusFinderApp
@@ -67,7 +71,5 @@ if __name__ == "__main__":
     ctk.set_default_color_theme("blue")
 
     root = ctk.CTk(className="focusfinder")
-
     app = FocusFinderApp(root)
-
     root.mainloop()
