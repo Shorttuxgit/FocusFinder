@@ -40,7 +40,15 @@ except ImportError:
     subprocess.run([sys.executable, "-m", "pip", "install", "customtkinter"], check=False)
     import customtkinter as ctk
 
-from FocusPY.src.ui_loading import FocusFinderApp
+# Choose the colour theme BEFORE importing any user-interface module, because
+# they copy the colours when they are imported (see constants.py)
+from FocusPY.src import constants
+from FocusPY.src.config_manager import load_config
+
+LIGHT_THEME = bool(load_config()["light_theme"])
+constants.apply_theme(LIGHT_THEME)
+
+from FocusPY.src.ui_loading import FocusFinderApp  # noqa: E402  (must come after apply_theme)
 
 
 # --------------------------------------------------
@@ -67,7 +75,8 @@ def configure_dpi_scaling():
 
 if __name__ == "__main__":
     configure_dpi_scaling()
-    ctk.set_appearance_mode("Dark")
+    # CustomTkinter's own defaults (dropdown lists, switches, title bar) follow the theme too
+    ctk.set_appearance_mode("Light" if LIGHT_THEME else "Dark")
     ctk.set_default_color_theme("blue")
 
     root = ctk.CTk(className="focusfinder")

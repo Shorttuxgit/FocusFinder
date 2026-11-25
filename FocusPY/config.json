@@ -1,6 +1,7 @@
 {
     "time_format": false,
-    "splash_screen": false,
+    "light_theme": false,
+    "splash_screen": true,
     "friends_system": true,
     "progress_system": true,
     "sett_enabled": true

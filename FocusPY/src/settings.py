@@ -66,6 +66,10 @@ SETTINGS = (
     # Display section of the Options panel
     Setting("time_format", "12-hour time", False, section="Display", requires="sett_enabled"),
 
+    # Light colour theme for the whole app (off = dark theme).
+    # (Takes effect the next time the app starts.)
+    Setting("light_theme", "Light theme", False, section="Display", requires="sett_enabled"),
+
     # Show the splash screen on a normal start-up. When off, the app opens
     # straight to the timetable if this week's timetable is already saved.
     # The splash still appears whenever a new timetable has to be downloaded.

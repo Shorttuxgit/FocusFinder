@@ -9,7 +9,10 @@ from datetime import datetime, date, timedelta
 from tkinter import ttk, filedialog
 import customtkinter as ctk
 
-from FocusPY.src.constants import BG_DARK, BG_SURFACE, BG_CARD, BG_HOVER, FG_TEXT, FG_SUBTEXT, FG_ACCENT, FG_GREEN
+from FocusPY.src.constants import (
+    BG_DARK, BG_SURFACE, BG_CARD, BG_HOVER, BUTTON_HOVER, FG_TEXT, FG_SUBTEXT, FG_ACCENT,
+    ACCENT_HOVER, FG_GREEN, DANGER, DANGER_HOVER, ZEBRA_ROW, OVERLAY_BG, GRID_LINE,
+)
 from FocusPY.src.config_manager import load_config, write_to_config, get_config_error
 from FocusPY.src.friend_manager import export_friend_file, import_friend_file, load_friends, delete_friend
 from FocusPY.src.course_names import unique_short_names
@@ -27,12 +30,7 @@ GRADE_SCALES = [
 ]
 COMMIT_SCALE = ["3", "2", "1", "★"]
 
-ZEBRA_ROW = "#1d1d2c"
-OVERLAY_BG = "#11111b"
-DANGER = "#f38ba8"
-DANGER_HOVER = "#eba0ac"
-ACCENT_HOVER = "#74a0f0"
-BUTTON_HOVER = "#585b70"
+# Extra room around table text, in pixels
 CELL_PADDING = 26
 
 # Button colours: (background, hover, text)
@@ -52,6 +50,17 @@ def make_button(parent, text, command, kind="secondary", **options):
     )
     settings.update(options)
     return ctk.CTkButton(parent, text=text, command=command, **settings)
+
+
+def make_dropdown(parent, values, **options):
+    """A standard dropdown. Extra keyword arguments (width, command, variable...) override the defaults."""
+    settings = dict(
+        fg_color=BG_HOVER, button_color=BG_DARK, button_hover_color=BG_SURFACE, height=34,
+        text_color=FG_TEXT, dropdown_fg_color=BG_CARD, dropdown_text_color=FG_TEXT,
+        dropdown_hover_color=BG_HOVER,
+    )
+    settings.update(options)
+    return ctk.CTkOptionMenu(parent, values=values, **settings)
 
 
 # --------------------------------------------------
@@ -470,9 +479,9 @@ class TimetableWidget:
             view_options = ["My Timetable"] + [f"Friend: {name}" for name in self.get_friends()]
 
             self.view_var = tk.StringVar(value=view_options[0])
-            self.view_dropdown = ctk.CTkOptionMenu(
-                bottom_inner, values=view_options, command=self.on_view_selected,
-                variable=self.view_var, width=190, height=36, fg_color=BG_HOVER, button_color=BG_DARK
+            self.view_dropdown = make_dropdown(
+                bottom_inner, view_options, command=self.on_view_selected,
+                variable=self.view_var, width=190, height=36
             )
             self.view_dropdown.pack(side=tk.LEFT, padx=6)
 
@@ -979,9 +988,8 @@ class TimetableWidget:
         ).pack(side=tk.LEFT, padx=(18, 12), pady=8)
 
         self.chart_names = unique_short_names([course.get("title") for course in self.my_progress])
-        ctk.CTkOptionMenu(
-            header, values=self.chart_names, command=self.on_chart_course,
-            width=280, height=34, fg_color=BG_HOVER, button_color=BG_DARK, button_hover_color=BG_SURFACE
+        make_dropdown(
+            header, self.chart_names, command=self.on_chart_course, width=280
         ).pack(side=tk.RIGHT, padx=(0, 14), pady=8)
 
         # Four summary boxes: current grade, change, target, commitment
@@ -1096,7 +1104,7 @@ class TimetableWidget:
         line_h = self.head_font.metrics("linespace")
         label_font = ("Arial", 10, "bold")
         small_font = ("Arial", 9)
-        grid_colour = "#2a2b3c"
+        grid_colour = GRID_LINE
 
         # Plot area: grade names on the left, three lines of labels underneath
         rows = len(scale)
@@ -1550,6 +1558,10 @@ class TimetableWidget:
         self.reload_days()
         self.update_display()
 
+    def apply_setting_light_theme(self, value):
+        # Colours are chosen once when the app starts, so this needs a restart
+        self.show_toast("Restart FocusFinder to switch to the " + ("light" if value else "dark") + " theme")
+
     def options_extra_friends(self, parent):
         # Remove-friend row; drawn under the Friends actions
         if not self.friends_system_enabled:
@@ -1565,9 +1577,8 @@ class TimetableWidget:
         friend_names = list(friend_data)
         del_var = tk.StringVar(value=friend_names[0])
         self._option_vars.append(del_var)
-        ctk.CTkOptionMenu(
-            remove_row, values=friend_names, variable=del_var, height=34,
-            fg_color=BG_HOVER, button_color=BG_DARK, button_hover_color=BG_SURFACE
+        make_dropdown(
+            remove_row, friend_names, variable=del_var
         ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
 
         def remove_friend():
