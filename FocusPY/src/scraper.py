@@ -50,9 +50,14 @@ def load_cached_timetable(need_progress=False):
     if "progress" not in data:
         return None
 
-    # Grades are wanted but this cache was saved with the grades panel off
-    if need_progress and not data.get("has_progress", True):
-        return None
+    if need_progress:
+        # Grades are wanted but this cache was saved with the grades panel off
+        if not data.get("has_progress", True):
+            return None
+
+        # Caches from before the Progress view have no grade history
+        if any("history" not in course for course in data["progress"]):
+            return None
 
     return (
         data.get("events", []),
@@ -151,20 +156,18 @@ def fetch_progress(page, base_url, logger_fn):
 
     courses = []
     for course in raw_courses:
-        # Use the most recent column that actually has a grade recorded
-        filled = [c for c in course["columns"] if c["grade"] or c["ttg"]]
-        if not filled:
+        # Every column that has a grade (or target) recorded, oldest first.
+        # Each new grade Focus adds becomes another column in the table.
+        history = [
+            {key: column[key] for key in ("period", "label", "grade", "ttg", "commit")}
+            for column in course["columns"]
+            if column["grade"] or column["ttg"]
+        ]
+        if not history:
             continue
 
-        latest = filled[-1]
-        courses.append({
-            "title": course["title"],
-            "period": latest["period"],
-            "label": latest["label"],
-            "grade": latest["grade"],
-            "ttg": latest["ttg"],
-            "commit": latest["commit"],
-        })
+        # The home page shows the most recent column; the Progress view uses all of them
+        courses.append({"title": course["title"], **history[-1], "history": history})
 
     logger_fn(f"[+] Loaded grades for {len(courses)} course(s).")
     return courses
@@ -196,9 +199,14 @@ def perform_login(p, logger_fn):
     except Exception:
         logger_fn("[!] Waiting for user to complete login in browser...")
 
+    # Tell the person straight away that the sign-in worked
+    logger_fn("[+] Login detected!", "Signed in! Saving your session...")
     context.storage_state(path=str(SESSION_FILE))
-    logger_fn("[+] Login detected! Session saved.")
+
+    # The sign-in window closes here. Update the status the moment it does,
+    # because starting the hidden browser that follows takes a few seconds.
     browser.close()
+    logger_fn("[+] Session saved.", "Signed in! Connecting to your timetable...")
 
 
 def remove_session():

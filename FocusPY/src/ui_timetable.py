@@ -58,26 +58,127 @@ def make_button(parent, text, command, kind="secondary", **options):
 # Grade ladder helpers
 # --------------------------------------------------
 
-def pick_grade_scale(target, current):
-    # Use the first ladder that contains the target grade (or else the current grade)
-    for grade in (target, current):
-        for scale in GRADE_SCALES:
-            if grade and grade in scale:
-                return scale
+def scale_hint(title):
+    # Course titles usually say which grading ladder applies (None = no clue)
+    text = (title or "").lower()
+    if any(word in text for word in ("btec", "diploma", "extended certificate", "cambridge technical")):
+        return 1
+    if any(word in text for word in ("a level", "a-level", "as level")):
+        return 0
+    return None
+
+
+def resolve_grade_index(scale, grade):
+    """Position of the grade on the ladder, or None if it isn't on it.
+
+    A grade given as a single letter stands for the doubled grade, because
+    Focus drops the second letter: "D" -> "DD", "M" -> "MM", "P" -> "PP".
+    An exact match always wins, so A Level "D" stays a plain D.
+    """
+    grade = (grade or "").strip()
+    if not grade:
+        return None
+    if grade in scale:
+        return scale.index(grade)
+    if grade + grade in scale:
+        return scale.index(grade + grade)
     return None
 
 
 def resolve_grade_indices(scale, grade):
-    """Positions on the ladder that match the grade. An exact grade matches one
-    position; a bare letter such as "D" or "M" matches every grade starting with
-    that letter (D -> DM, DD, D*D, D*D*)."""
-    if not grade:
-        return []
-    if grade in scale:
-        return [scale.index(grade)]
-    if len(grade) == 1:
-        return [i for i, entry in enumerate(scale) if entry.startswith(grade)]
-    return []
+    # Same as resolve_grade_index, as a list (empty when there is no match)
+    index = resolve_grade_index(scale, grade)
+    return [] if index is None else [index]
+
+
+def pick_scale(title, grades):
+    """The grade ladder that fits the most of the given grades.
+
+    The title hint is tried first, so it decides any tie (for example a lone
+    "D", which exists on both ladders).
+    """
+    order = list(range(len(GRADE_SCALES)))
+    hint = scale_hint(title)
+    if hint is not None:
+        order.remove(hint)
+        order.insert(0, hint)
+
+    best, best_score = None, 0
+    for index in order:
+        scale = GRADE_SCALES[index]
+        score = sum(resolve_grade_index(scale, grade) is not None for grade in grades)
+        if score > best_score:
+            best, best_score = scale, score
+    return best
+
+
+def course_history(course):
+    """Every recorded grade for a course, oldest first.
+
+    Older saved data has no history, so the latest values are used as one point.
+    """
+    history = course.get("history")
+    if history:
+        return history
+    return [{key: course.get(key, "") for key in ("period", "label", "grade", "ttg", "commit")}]
+
+
+def history_grades(points):
+    # Every grade and target mentioned in the history (used to pick the ladder)
+    return [value for point in points for value in (point["grade"], point["ttg"])]
+
+
+def plural(count, word):
+    return f"{count} {word}" + ("" if count == 1 else "s")
+
+
+def summarise_history(scale, points):
+    """Text for the Progress view's summary boxes.
+
+    Returns a dict. The *_kind values are "good", "bad" or "plain" and decide
+    the colour of each box.
+    """
+    last = points[-1]
+    now = resolve_grade_index(scale, last["grade"])
+    target = resolve_grade_index(scale, last["ttg"])
+
+    info = {
+        "current": scale[now] if now is not None else "—",
+        "current_sub": " · ".join(part for part in (last["label"], last["period"]) if part),
+        "change": "—", "change_sub": "", "change_kind": "plain",
+        "target": scale[target] if target is not None else "—",
+        "target_sub": "", "target_kind": "plain",
+        "commit": normalise_commit(last["commit"]) or "—",
+    }
+
+    # Change since the last earlier point that had a readable grade
+    if now is not None:
+        before = next((p for p in reversed(points[:-1])
+                       if resolve_grade_index(scale, p["grade"]) is not None), None)
+
+        if before is None:
+            info["change"], info["change_sub"] = "First grade", "nothing to compare yet"
+        else:
+            diff = now - resolve_grade_index(scale, before["grade"])
+            since = f"since {before['label'] or before['period']}".strip()
+            if diff > 0:
+                info.update(change=f"▲ {plural(diff, 'grade')}", change_sub=since, change_kind="good")
+            elif diff < 0:
+                info.update(change=f"▼ {plural(-diff, 'grade')}", change_sub=since, change_kind="bad")
+            else:
+                info.update(change="No change", change_sub=since)
+
+    # Distance to the target
+    if now is not None and target is not None:
+        gap = target - now
+        if gap > 0:
+            info["target_sub"] = f"{plural(gap, 'grade')} to go"
+        elif gap == 0:
+            info.update(target_sub="On target", target_kind="good")
+        else:
+            info.update(target_sub=f"{plural(-gap, 'grade')} above target", target_kind="good")
+
+    return info
 
 
 def plan_markers(now_idxs, target_idx):
@@ -324,8 +425,12 @@ class TimetableWidget:
         # Main application layout container
         self.main_container = ctk.CTkFrame(self.root, fg_color=BG_DARK, corner_radius=0)
 
+        # The timetable screen (greeting, day navigation, table, grades panel) lives
+        # in its own page so the Progress view can take its place
+        self.timetable_page = ctk.CTkFrame(self.main_container, fg_color="transparent", corner_radius=0)
+
         # Greeting box in its own separate centered card at the top
-        greeting_card = ctk.CTkFrame(self.main_container, fg_color=BG_CARD, corner_radius=16)
+        greeting_card = ctk.CTkFrame(self.timetable_page, fg_color=BG_CARD, corner_radius=16)
         greeting_card.pack(fill=tk.X, pady=(0, 10), ipady=2)
 
         self.welcome_label = ctk.CTkLabel(
@@ -337,7 +442,7 @@ class TimetableWidget:
         self.welcome_label.pack(anchor="center", pady=6)
 
         # Day navigation card: previous button, clickable date, next button
-        nav_card = ctk.CTkFrame(self.main_container, fg_color=BG_CARD, corner_radius=16)
+        nav_card = ctk.CTkFrame(self.timetable_page, fg_color=BG_CARD, corner_radius=16)
         nav_card.pack(fill=tk.X, pady=(0, 10), ipadx=12, ipady=6)
 
         self.prev_btn = make_button(nav_card, "<< Previous Day", self.prev_day, width=140)
@@ -366,17 +471,29 @@ class TimetableWidget:
 
             self.view_var = tk.StringVar(value=view_options[0])
             self.view_dropdown = ctk.CTkOptionMenu(
-                bottom_inner, values=view_options, command=self.switch_timetable_view,
+                bottom_inner, values=view_options, command=self.on_view_selected,
                 variable=self.view_var, width=190, height=36, fg_color=BG_HOVER, button_color=BG_DARK
             )
             self.view_dropdown.pack(side=tk.LEFT, padx=6)
+
+        # Progress view button: sits between the dropdown and Options. It only
+        # exists when the progress system is on and grades were found.
+        self.progress_page = None
+        self.progress_view_open = False
+        self.view_btn = None
+        if self.progress_enabled and self.my_progress:
+            self.view_btn = make_button(bottom_inner, "Progress", self.toggle_progress_view, width=110)
+            self.view_btn.pack(side=tk.LEFT, padx=6)
 
         # The Options button only exists when there is something to show in it
         if self.has_options():
             make_button(bottom_inner, "Options", self.open_options_menu, width=110).pack(side=tk.LEFT, padx=6)
 
+        # The toolbar is packed first so it stays at the bottom; the page fills the rest
+        self.timetable_page.pack(fill=tk.BOTH, expand=True)
+
         # Timetable events table card
-        table_card = ctk.CTkFrame(self.main_container, fg_color=BG_SURFACE, corner_radius=16, border_width=0)
+        table_card = ctk.CTkFrame(self.timetable_page, fg_color=BG_SURFACE, corner_radius=16, border_width=0)
         table_card.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
         self.table_card = table_card
 
@@ -587,7 +704,7 @@ class TimetableWidget:
         if not self.my_progress:
             return
 
-        card = ctk.CTkFrame(self.main_container, fg_color=BG_CARD, corner_radius=16)
+        card = ctk.CTkFrame(self.timetable_page, fg_color=BG_CARD, corner_radius=16)
         card.pack(side=tk.BOTTOM, fill=tk.X, pady=(0, 10), before=self.table_card)
         self.progress_card = card
 
@@ -709,7 +826,7 @@ class TimetableWidget:
         grade = course.get("grade", "")
         target = course.get("ttg", "")
         commit = normalise_commit(course.get("commit", ""))
-        scale = pick_grade_scale(target, grade)
+        scale = pick_scale(course.get("title"), history_grades(course_history(course)))
 
         block = ctk.CTkFrame(parent, fg_color=BG_SURFACE, corner_radius=10)
 
@@ -805,6 +922,278 @@ class TimetableWidget:
             self.progress_card.pack(side=tk.BOTTOM, fill=tk.X, pady=(0, 10), before=self.table_card)
         else:
             self.progress_card.pack_forget()
+
+    # ------------------------------------------------------------------
+    # Progress view: grade history as a chart.
+    # Nothing here is built at start-up; the page is created the first time
+    # the Progress button is pressed.
+    # ------------------------------------------------------------------
+
+    def on_view_selected(self, choice):
+        # Picking a timetable from the dropdown always returns to the timetable screen
+        self.show_timetable_page()
+        self.switch_timetable_view(choice)
+
+    def toggle_progress_view(self):
+        # The Progress button switches between the two screens
+        if self.progress_view_open:
+            self.show_timetable_page()
+        else:
+            self.show_progress_page()
+
+    def show_progress_page(self):
+        # Build the page on first use only, so it costs nothing at start-up
+        if self.progress_page is None:
+            self.build_progress_page()
+
+        self.timetable_page.pack_forget()
+        self.progress_page.pack(fill=tk.BOTH, expand=True)
+        self.view_btn.configure(text="Timetable")
+        self.progress_view_open = True
+
+        # Draw once the page has a size (the chart also redraws whenever it is resized)
+        self.root.after_idle(self.draw_progress_chart)
+
+    def show_timetable_page(self):
+        if not self.progress_view_open:
+            return
+
+        self.progress_page.pack_forget()
+        self.timetable_page.pack(fill=tk.BOTH, expand=True)
+        self.view_btn.configure(text="Progress")
+        self.progress_view_open = False
+
+    def build_progress_page(self):
+        # Not packed here; show_progress_page decides when it appears
+        page = ctk.CTkFrame(self.main_container, fg_color="transparent", corner_radius=0)
+        self.progress_page = page
+        self.chart_index = 0
+        self._chart_job = None
+
+        # Header card: title on the left, course picker on the right
+        header = ctk.CTkFrame(page, fg_color=BG_CARD, corner_radius=16)
+        header.pack(fill=tk.X, pady=(0, 10), ipady=2)
+
+        ctk.CTkLabel(
+            header, text="Progress", font=("Arial", 18, "bold"), text_color=FG_ACCENT
+        ).pack(side=tk.LEFT, padx=(18, 12), pady=8)
+
+        self.chart_names = unique_short_names([course.get("title") for course in self.my_progress])
+        ctk.CTkOptionMenu(
+            header, values=self.chart_names, command=self.on_chart_course,
+            width=280, height=34, fg_color=BG_HOVER, button_color=BG_DARK, button_hover_color=BG_SURFACE
+        ).pack(side=tk.RIGHT, padx=(0, 14), pady=8)
+
+        # Four summary boxes: current grade, change, target, commitment
+        summary = ctk.CTkFrame(page, fg_color="transparent")
+        summary.pack(fill=tk.X, pady=(0, 10))
+
+        self.chips = {}
+        captions = (("current", "Current grade"), ("change", "Change"), ("target", "Target"), ("commit", "Commitment"))
+        for column, (key, caption) in enumerate(captions):
+            summary.grid_columnconfigure(column, weight=1, uniform="chip")
+
+            box = ctk.CTkFrame(summary, fg_color=BG_CARD, corner_radius=14)
+            box.grid(row=0, column=column, sticky="nsew",
+                     padx=(0 if column == 0 else 5, 0 if column == len(captions) - 1 else 5))
+
+            ctk.CTkLabel(
+                box, text=caption.upper(), font=("Arial", 9, "bold"), text_color=FG_SUBTEXT
+            ).pack(pady=(9, 0))
+            value = ctk.CTkLabel(box, text="", font=("Arial", 22, "bold"), text_color=FG_TEXT)
+            value.pack()
+            sub = ctk.CTkLabel(box, text="", font=("Arial", 10), text_color=FG_SUBTEXT)
+            sub.pack(pady=(0, 9))
+            self.chips[key] = (value, sub)
+
+        # Chart card: course title and legend on top, the chart underneath
+        card = ctk.CTkFrame(page, fg_color=BG_SURFACE, corner_radius=16)
+        card.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+
+        top = ctk.CTkFrame(card, fg_color="transparent")
+        top.pack(fill=tk.X, padx=16, pady=(12, 0))
+
+        ctk.CTkLabel(top, text="◆ Target", font=("Arial", 11, "bold"), text_color=FG_GREEN).pack(side=tk.RIGHT)
+        ctk.CTkLabel(top, text="● Grade    ", font=("Arial", 11, "bold"), text_color=FG_ACCENT).pack(side=tk.RIGHT)
+        self.chart_title = ctk.CTkLabel(
+            top, text="", font=("Arial", 13, "bold"), text_color=FG_TEXT, anchor="w"
+        )
+        self.chart_title.pack(side=tk.LEFT)
+
+        self.chart_canvas = tk.Canvas(card, bg=BG_SURFACE, highlightthickness=0, bd=0)
+        self.chart_canvas.pack(fill=tk.BOTH, expand=True, padx=8, pady=(4, 10))
+        self.chart_canvas.bind("<Configure>", self.on_chart_configure)
+
+        self.update_chart_summary()
+
+    def on_chart_course(self, name):
+        # A different course was picked in the header
+        self.chart_index = self.chart_names.index(name)
+        self.update_chart_summary()
+        self.draw_progress_chart()
+
+    def on_chart_configure(self, _event):
+        # Redraw once a resize settles
+        if self._chart_job is not None:
+            self.root.after_cancel(self._chart_job)
+        self._chart_job = self.root.after(60, self.draw_progress_chart)
+
+    def set_chip(self, key, value, sub, value_color, sub_color=FG_SUBTEXT):
+        value_label, sub_label = self.chips[key]
+        value_label.configure(text=value, text_color=value_color)
+        sub_label.configure(text=sub, text_color=sub_color)
+
+    def update_chart_summary(self):
+        # Fill the four boxes and the chart title for the selected course
+        course = self.my_progress[self.chart_index]
+        points = course_history(course)
+        scale = pick_scale(course.get("title"), history_grades(points))
+
+        self.chart_title.configure(text=course.get("title", "Course"))
+
+        # Grades that aren't on a known ladder can't be summarised
+        if scale is None:
+            for key in self.chips:
+                self.set_chip(key, "—", "", FG_TEXT)
+            return
+
+        info = summarise_history(scale, points)
+        change_colour = {"good": FG_GREEN, "bad": DANGER, "plain": FG_TEXT}[info["change_kind"]]
+        target_sub_colour = FG_GREEN if info["target_kind"] == "good" else FG_SUBTEXT
+
+        self.set_chip("current", info["current"], info["current_sub"], FG_ACCENT)
+        self.set_chip("change", info["change"], info["change_sub"], change_colour)
+        self.set_chip("target", info["target"], info["target_sub"], FG_GREEN, target_sub_colour)
+        self.set_chip("commit", info["commit"], "", FG_TEXT)
+
+    def draw_progress_chart(self):
+        # Line chart of the selected course: one point per recorded grade (blue
+        # line) with the target set at each point (green diamonds), labelled
+        # with the Focus code (e.g. SAS1) and period underneath.
+        self._chart_job = None
+        if self.progress_page is None or not self.progress_view_open:
+            return
+
+        canvas = self.chart_canvas
+        canvas.delete("all")
+        width, height = canvas.winfo_width(), canvas.winfo_height()
+        if width < 150 or height < 150:
+            return      # not laid out yet; the resize event will draw it
+
+        course = self.my_progress[self.chart_index]
+        points = course_history(course)
+        scale = pick_scale(course.get("title"), history_grades(points))
+
+        if scale is None:
+            canvas.create_text(
+                width / 2, height / 2, text="These grades can't be shown on a chart",
+                fill=FG_SUBTEXT, font=("Arial", 12)
+            )
+            return
+
+        # Sizes below are multiplied by px so the chart is the right size on high-DPI screens
+        px = max(1.0, self.root.winfo_fpixels("1i") / 96)
+        line_h = self.head_font.metrics("linespace")
+        label_font = ("Arial", 10, "bold")
+        small_font = ("Arial", 9)
+        grid_colour = "#2a2b3c"
+
+        # Plot area: grade names on the left, three lines of labels underneath
+        rows = len(scale)
+        left = max(self.head_font.measure(name) for name in scale) + 24 * px
+        right = 26 * px
+        axis_y = height - (3 * line_h + 18 * px)
+        top_row = 32 * px
+        bottom_row = axis_y - 14 * px
+        step = (bottom_row - top_row) / (rows - 1)
+
+        def y_of(index):
+            return bottom_row - index * step
+
+        count = len(points)
+        pad = 40 * px
+        span = max(1.0, width - left - right - 2 * pad)
+        spacing = span / (count - 1) if count > 1 else span
+
+        def x_of(i):
+            return left + pad + (span * i / (count - 1) if count > 1 else span / 2)
+
+        # Background: striped rows with a grade name on each
+        for i, name in enumerate(scale):
+            y = y_of(i)
+            canvas.create_rectangle(
+                left, max(0, y - step / 2), width - right, min(axis_y, y + step / 2),
+                fill=ZEBRA_ROW if i % 2 == 0 else BG_SURFACE, outline=""
+            )
+            canvas.create_line(left, y, width - right, y, fill=grid_colour)
+            canvas.create_text(left - 12 * px, y, text=name, anchor="e", fill=FG_SUBTEXT, font=label_font)
+
+        # A faint guide line down from every point to its label
+        for i in range(count):
+            canvas.create_line(x_of(i), top_row - 14 * px, x_of(i), axis_y, fill=grid_colour, dash=(2, 4))
+
+        grade_idx = [resolve_grade_index(scale, point["grade"]) for point in points]
+        target_idx = [resolve_grade_index(scale, point["ttg"]) for point in points]
+
+        # Target: dashed green line with a diamond at each point.
+        # With only one point, the line runs the full width so the goal is easy to see.
+        targets = [(x_of(i), y_of(t)) for i, t in enumerate(target_idx) if t is not None]
+        dash_width = max(1, int(1.5 * px))
+        if len(targets) == 1:
+            canvas.create_line(left, targets[0][1], width - right, targets[0][1],
+                               fill=FG_GREEN, width=dash_width, dash=(6, 4))
+        elif len(targets) > 1:
+            canvas.create_line(*[value for point in targets for value in point],
+                               fill=FG_GREEN, width=dash_width, dash=(6, 4))
+        for x, y in targets:
+            r = 7 * px
+            canvas.create_polygon(x, y - r, x + r, y, x, y + r, x - r, y,
+                                  fill=FG_GREEN, outline=BG_SURFACE, width=2)
+
+        # Grades: blue line and dots, the newest one larger with a ring around it
+        actual = [(x_of(i), y_of(g), i) for i, g in enumerate(grade_idx) if g is not None]
+        if len(actual) > 1:
+            canvas.create_line(*[value for x, y, _ in actual for value in (x, y)],
+                               fill=FG_ACCENT, width=3 * px, capstyle="round", joinstyle="round")
+
+        for n, (x, y, i) in enumerate(actual):
+            newest = n == len(actual) - 1
+            r = (7 if newest else 5.5) * px
+            if newest:
+                ring = r + 5 * px
+                canvas.create_oval(x - ring, y - ring, x + ring, y + ring, outline=FG_ACCENT, width=2)
+            canvas.create_oval(x - r, y - r, x + r, y + r, fill=FG_ACCENT, outline=BG_SURFACE, width=2)
+
+            # Grade name above the dot, or below it when the target diamond is just above
+            offset = (20 + (5 if newest else 0)) * px
+            t = target_idx[i]
+            target_above = t is not None and 0 < y - y_of(t) < 34 * px
+            below = target_above and y + offset < axis_y + 4 * px
+            canvas.create_text(
+                x, y + offset if below else y - offset,
+                text=scale[grade_idx[i]], fill=FG_TEXT, font=label_font
+            )
+
+        # Under the chart: Focus code, period and commitment for every point
+        show_period = count == 1 or spacing > 50 * px
+        show_commit = count == 1 or spacing > 84 * px
+        for i, point in enumerate(points):
+            x = x_of(i)
+            y = axis_y + 12 * px
+
+            canvas.create_text(
+                x, y, text=point["label"] or "—", anchor="n", font=label_font,
+                fill=FG_ACCENT if i == count - 1 else FG_TEXT
+            )
+
+            if show_period and point["period"]:
+                canvas.create_text(x, y + line_h, text=point["period"], anchor="n",
+                                   fill=FG_SUBTEXT, font=small_font)
+
+            commit = normalise_commit(point["commit"])
+            if show_commit and commit:
+                canvas.create_text(x, y + 2 * line_h, text=f"Commit {commit}", anchor="n",
+                                   fill=FG_SUBTEXT, font=small_font)
 
     # ------------------------------------------------------------------
     # Timetable data
@@ -947,9 +1336,11 @@ class TimetableWidget:
             entry["on_close"]()
 
     def on_escape(self):
-        # Escape closes the top-most overlay
+        # Escape closes the top-most overlay, or else leaves the Progress view
         if self._overlays:
             self.close_overlay(self._overlays[-1])
+        elif self.progress_view_open:
+            self.show_timetable_page()
 
     def show_toast(self, message, is_error=False):
         # Small auto-dismissing banner for quick confirmations
