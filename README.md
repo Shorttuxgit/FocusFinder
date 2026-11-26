@@ -2,8 +2,7 @@
 A small project aiming to move the focus system to a real application on Android and IOS (with a caveat).
 
 # Coming Soon
-- Focus on Android will save friend's timetables for more than one week. Internal discussions ongoing for how long to save for.
-- NFC sharing Focus on Android
+- Focus on Android will save friend's timetables for more than one week. Internal discussions ongoing for how long to save for. (Not true)
 - Peer to Peer sharing to capture the latest timetables from friends easily this will not be in release 1.1.0 however will likely release before 1.2.0 
 
 ## FocusPy
@@ -24,11 +23,13 @@ An Android app to display your Focus timetable
 
 It supports
 * Fetching this weeks timetable data
-* Sharing your timetable to your friends via a QR code or a friend.fff file
+* Sharing your timetable to your friends via a QR code or a friend.fff file or through NFC.
 * Telling you whether you share any free periods with your friends
 * Telling you the weather through a dedicated forecast tab
 * Has a settings menu for enabling/disabling specific features and resetting data
-* Showing which Busses are serviced by your bus stops, and departure times of any busses. 
+* Showing which Busses are serviced by your bus stops, and departure times of any busses.
+* Has news integration
+* Shows your progress from Focus along with a graph of your progress and a predicted grade from a line of best fit.
 
 It is written in Kotlin.
 
