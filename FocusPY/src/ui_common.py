@@ -37,3 +37,31 @@ def make_dropdown(parent, values, **options):
     )
     settings.update(options)
     return ctk.CTkOptionMenu(parent, values=values, **settings)
+
+
+def fit_text(font, text, max_pixels):
+    """Shorten text with an ellipsis so it fits in max_pixels."""
+    if max_pixels <= 0 or font.measure(text) <= max_pixels:
+        return text
+
+    # Binary search for the longest piece of text that still fits
+    low, high = 0, len(text)
+    while low < high:
+        middle = (low + high + 1) // 2
+        if font.measure(text[:middle].rstrip() + "…") <= max_pixels:
+            low = middle
+        else:
+            high = middle - 1
+
+    return text[:low].rstrip() + "…" if low else "…"
+
+
+def round_rect(canvas, x1, y1, x2, y2, radius, **options):
+    """Draw a rounded rectangle on a canvas (options are passed to create_polygon)."""
+    r = min(radius, (x2 - x1) / 2, (y2 - y1) / 2)
+    points = [
+        x1 + r, y1, x2 - r, y1, x2, y1, x2, y1 + r,
+        x2, y2 - r, x2, y2, x2 - r, y2, x1 + r, y2,
+        x1, y2, x1, y2 - r, x1, y1 + r, x1, y1,
+    ]
+    return canvas.create_polygon(points, smooth=True, **options)

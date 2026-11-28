@@ -24,6 +24,14 @@ APP_USER_MODEL_ID = "uk.shortclaws.focusfinder"   # must match main.py
 PACKAGE_NAME = "FocusPY"
 VERSION = "1.1.0"
 
+# The oldest installed version that can still be updated normally. An install
+# OLDER than this (or one with no version recorded) gets a full reset instead:
+# settings, cached timetables, friends and login are deleted and everything is
+# installed fresh. The person is warned and must agree first.
+# Set this to the version that last needed a forced re-install. It must not be
+# higher than VERSION.
+SUPPORTED_VERSION = "1.0.0"
+
 # Rebuild application files and the virtual environment during updates.
 CLEAN_INSTALL = True
 
@@ -99,7 +107,8 @@ def validate_configuration():
     """Validate release configuration."""
     if WIPE_USER_DATA and not CLEAN_INSTALL:
         raise ValueError("WIPE_USER_DATA can only be enabled when CLEAN_INSTALL is True.")
-    parse_version(VERSION)
+    if compare_versions(SUPPORTED_VERSION, VERSION) > 0:
+        raise ValueError("SUPPORTED_VERSION cannot be higher than VERSION.")
 
 
 def validate_source():
@@ -157,6 +166,21 @@ def save_installed_version(install_dir):
     (install_dir / "version.txt").write_text(VERSION + "\n", encoding="utf-8")
 
 
+def needs_forced_reset(install_dir):
+    """True when the installed version is older than SUPPORTED_VERSION (or has none recorded)."""
+    if not (install_dir / PACKAGE_NAME).is_dir():
+        return False
+
+    installed = get_installed_version(install_dir)
+    if installed == "Unknown":
+        return True
+
+    try:
+        return compare_versions(installed, SUPPORTED_VERSION) < 0
+    except ValueError:
+        return True
+
+
 def check_installed_version(install_dir):
     """Prevent installation of an older release. Returns False to stop."""
     if not (install_dir / PACKAGE_NAME).is_dir():
@@ -166,17 +190,11 @@ def check_installed_version(install_dir):
     print(f"Installed version: {installed}")
     print(f"Installer version: {VERSION}")
 
-    # An install from before version numbers were recorded
+    # An install from before version numbers were recorded: too old to update, so it is reset
     if installed == "Unknown":
-        if CLEAN_INSTALL:
-            print("[!] This is a legacy installation without version information.")
-            print("[!] It will be handled using the configured clean-install process.")
-            return True
-
-        print("\n[!] INSTALLER BLOCKED")
-        print("This installation has no recorded version, so its age cannot be verified.")
-        print("This release has CLEAN_INSTALL disabled; refusing to continue safely.")
-        return False
+        print("[!] This is a legacy installation without version information.")
+        print("[!] It is too old to update, so updating will do a full reset.")
+        return True
 
     try:
         comparison = compare_versions(VERSION, installed)
@@ -499,11 +517,10 @@ def remove_installation(install_dir):
 
 
 def confirm_action(message):
-    """Require explicit confirmation for destructive operations."""
+    """Ask before a destructive operation. y (or yes) continues; anything else cancels."""
     print()
     print(message)
-    print("Type YES to continue.")
-    return input("> ").strip() == "YES"
+    return input("Continue? (y/n): ").strip().lower() in ("y", "yes")
 
 
 # --------------------------------------------------
@@ -544,8 +561,14 @@ def install_application(existing_dir):
     finish_installation(new_dir)
 
 
-def clean_update_application(old_install_dir):
-    """Rebuild the installation while preserving or wiping user data."""
+def clean_update_application(old_install_dir, wipe_data=None):
+    """Rebuild the installation while preserving or wiping user data.
+
+    wipe_data=None follows the WIPE_USER_DATA setting; True deletes everything saved.
+    """
+    if wipe_data is None:
+        wipe_data = WIPE_USER_DATA
+
     validate_source()
     refuse_to_run_from_install(old_install_dir)
 
@@ -553,8 +576,8 @@ def clean_update_application(old_install_dir):
     old_package = old_install_dir / PACKAGE_NAME
     backup_dir = None
 
-    if WIPE_USER_DATA:
-        print("[!] WIPE_USER_DATA is enabled. No user data backup will be made.")
+    if wipe_data:
+        print("[!] All saved data will be wiped. No user data backup will be made.")
     else:
         backup_dir = Path(tempfile.mkdtemp(prefix="focusfinder-user-data-"))
         backup_user_data(old_package, backup_dir)
@@ -586,8 +609,12 @@ def clean_update_application(old_install_dir):
             shutil.rmtree(backup_dir, ignore_errors=True)
 
 
-def update_application(install_dir):
-    """Update FocusFinder using the configured update strategy."""
+def update_application(install_dir, force_reset=False):
+    """Update FocusFinder using the configured update strategy.
+
+    force_reset=True (the install is older than SUPPORTED_VERSION) always does
+    a clean rebuild and deletes all saved data, whatever CLEAN_INSTALL says.
+    """
     validate_source()
 
     if not (install_dir / PACKAGE_NAME).is_dir():
@@ -599,6 +626,11 @@ def update_application(install_dir):
     print(f"[*] Installed version: {get_installed_version(install_dir)}")
     print(f"[*] New version: {VERSION}")
     print()
+
+    if force_reset:
+        print("[*] This installation is too old to update, so it is being fully reset.")
+        clean_update_application(install_dir, wipe_data=True)
+        return
 
     if CLEAN_INSTALL:
         print("[*] This release is configured for a clean installation.")
@@ -638,8 +670,7 @@ def choose_install(install_dir):
     if install_dir.exists() and not confirm_action(
         "This will completely remove the existing installation, "
         "including saved data inside its installation folder, "
-        "before installing a fresh copy.\n"
-        "Type YES only if you are happy to proceed."
+        "before installing a fresh copy."
     ):
         print("\n[*] Installation cancelled.")
         return
@@ -659,6 +690,29 @@ def choose_update(install_dir, installed):
         print("\n[!] FocusFinder is not currently installed.")
         print("[!] Choose Install / Reinstall instead.")
         return 1
+
+    # Too old to update: warn, then do a full reset (nothing is kept)
+    if needs_forced_reset(install_dir):
+        banner("YOUR INSTALLATION IS TOO OLD TO UPDATE")
+        print(f"You have version {get_installed_version(install_dir)}; updates are only")
+        print(f"supported from version {SUPPORTED_VERSION} onwards.")
+        print("FocusFinder will be removed and installed again from scratch.")
+        describe_user_data_wipe()
+
+        if not confirm_action(
+            "WARNING: Your saved FocusFinder data will be permanently deleted. "
+            "This cannot be undone."
+        ):
+            print("\n[*] Update cancelled. Nothing has been changed.")
+            return 0
+
+        update_application(install_dir, force_reset=True)
+        banner(
+            f"[+] {DISPLAY_NAME} successfully reset and updated!",
+            f"    Version: {VERSION}",
+            "    Saved application data was wiped (the old version could not be updated).",
+        )
+        return 0
 
     if CLEAN_INSTALL:
         banner("THIS UPDATE REQUIRES A CLEAN INSTALLATION")
@@ -727,6 +781,11 @@ def main():
     # Stop before showing the menu if this installer is older than what is installed
     if not check_installed_version(install_dir):
         return 1
+
+    if needs_forced_reset(install_dir):
+        print()
+        print("[!] This installation is too old to update normally.")
+        print("[!] Choosing Update will fully reset it (all saved data is deleted).")
 
     print()
     print(f"Installation directory: {install_dir}")

@@ -1,3 +1,5 @@
+import re
+
 # --------------------------------------------------
 # Grade logic shared by the home-page grades panel and the Progress view
 # (pure Python: nothing in this file draws anything)
@@ -12,6 +14,17 @@ GRADE_SCALES = [
 
 # Commitment levels, in the order they are shown
 COMMIT_SCALE = ["3", "2", "1", "★"]
+
+
+# Qualifications whose top grade is lower than their ladder's. Each rule is
+#     (pattern found in the course title, highest grade that really exists)
+# so an AS Level ladder stops at A instead of showing an A* nobody can get.
+# To add one, add a line here. If a course ever shows a grade above the limit
+# (a real A* in the data, say), the limit is ignored for that course.
+TOP_GRADE_RULES = (
+    (r"\bas\b", "A"),                # AS Level
+    (r"\bcore maths\b", "A"),        # Level 3 Core Maths
+)
 
 
 def scale_hint(title):
@@ -47,8 +60,32 @@ def resolve_grade_indices(scale, grade):
     return [] if index is None else [index]
 
 
+def top_grade_limit(title):
+    # Highest grade that exists for this kind of course, or None if there is no limit
+    text = (title or "").lower()
+    for pattern, grade in TOP_GRADE_RULES:
+        if re.search(pattern, text):
+            return grade
+    return None
+
+
+def trim_scale(scale, title, grades):
+    """Cut grades that don't exist for this course off the top of the ladder.
+
+    A grade the student actually has, or is aiming for, is never cut off.
+    """
+    limit = top_grade_limit(title)
+    if limit not in scale:
+        return scale
+
+    reached = [resolve_grade_index(scale, grade) for grade in grades]
+    highest = max([index for index in reached if index is not None], default=-1)
+    return scale[:max(scale.index(limit), highest) + 1]
+
+
 def pick_scale(title, grades):
-    """The grade ladder that fits the most of the given grades.
+    """The grade ladder that fits the most of the given grades, cut down to
+    the subject's real top grade.
 
     The title hint is tried first, so it decides any tie (for example a lone
     "D", which exists on both ladders).
@@ -65,7 +102,8 @@ def pick_scale(title, grades):
         score = sum(resolve_grade_index(scale, grade) is not None for grade in grades)
         if score > best_score:
             best, best_score = scale, score
-    return best
+
+    return trim_scale(best, title, grades) if best else None
 
 
 def course_history(course):

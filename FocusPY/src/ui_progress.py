@@ -29,6 +29,7 @@ class ProgressView:
         self.courses = courses
 
         self.index = 0              # which course is selected
+        self._shown = {}            # last text put in each label, to skip redundant redraws
         self.visible = False        # only draw while the page is on screen
         self._redraw_job = None
 
@@ -142,6 +143,12 @@ class ProgressView:
     # ------------------------------------------------------------------
 
     def set_chip(self, key, value, sub, value_color, sub_color=FG_SUBTEXT):
+        # Changing a label redraws it, so only touch the ones that really changed
+        state = (value, sub, value_color, sub_color)
+        if self._shown.get(key) == state:
+            return
+        self._shown[key] = state
+
         value_label, sub_label = self.chips[key]
         value_label.configure(text=value, text_color=value_color)
         sub_label.configure(text=sub, text_color=sub_color)
@@ -152,7 +159,10 @@ class ProgressView:
         points = course_history(course)
         scale = pick_scale(course.get("title"), history_grades(points))
 
-        self.title_label.configure(text=course.get("title", "Course"))
+        title = course.get("title", "Course")
+        if self._shown.get("title") != title:
+            self._shown["title"] = title
+            self.title_label.configure(text=title)
 
         # Grades that aren't on a known ladder can't be summarised
         if scale is None:
